@@ -504,22 +504,48 @@ class DynamicIslandHUD:
                 self.vel_w = self.vel_h = self.vel_r = self.vel_x = self.vel_y = 0.0
                 self.is_animating = False
 
-            # Render canvas image and items FIRST to avoid rectangular frame flash
+            # Animate in-place without rebuilding canvas items
             self.canvas.config(width=int(self.curr_w), height=int(self.curr_h))
-            self.render()
-            self.is_dirty = False
+            self.update_morph_layout(int(self.curr_w), int(self.curr_h), int(self.curr_r))
 
-            # Reposition smoothly with native Win32 SetWindowPos (supports negative monitor coords seamlessly)
+            # Reposition smoothly with native Win32 SetWindowPos
             user32.SetWindowPos(self.hwnd, 0, int(self.curr_x), int(self.curr_y), int(self.curr_w), int(self.curr_h), SWP_NOZORDER | SWP_NOACTIVATE)
 
-        self.pulse_frame_idx = (self.pulse_frame_idx + 1) % 32
-        self.update_antialiased_dot()
-
-        if self.is_dirty:
+        if not self.is_animating and self.is_dirty:
             self.render()
             self.is_dirty = False
 
         self.root.after(6, self.tick_loop)
+
+    def update_morph_layout(self, w, h, radius):
+        # 1. Update background capsule image smoothly in-place
+        border_col = PIL_BORDER_HOVER if self.is_hovered else PIL_BORDER
+        img = Image.new('RGBA', (w, h), (1, 1, 1, 0))
+        draw = ImageDraw.Draw(img)
+        draw.rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, fill=PIL_ISLAND_BG, outline=border_col, width=1)
+        self.bg_photo = ImageTk.PhotoImage(img)
+
+        if not self.canvas.find_withtag('bg'):
+            self.canvas.create_image(0, 0, anchor='nw', image=self.bg_photo, tags='bg')
+        else:
+            self.canvas.itemconfig('bg', image=self.bg_photo)
+
+        # 2. Update existing text & dot coordinates directly with zero object re-creation
+        cy = h // 2
+        if self.current_view == 'min':
+            if self.canvas.find_withtag('min_right'):
+                self.canvas.coords('min_right', w - 24, cy)
+            if self.canvas.find_withtag('min_left'):
+                self.canvas.coords('min_left', 36, cy)
+            if self.canvas.find_withtag('dot_img'):
+                self.canvas.coords('dot_img', 20 - 14, cy - 14)
+        elif self.current_view == 'normal':
+            if self.canvas.find_withtag('norm_right'):
+                self.canvas.coords('norm_right', w - 22, 64)
+            if self.canvas.find_withtag('norm_expand'):
+                self.canvas.coords('norm_expand', w - 22, 104)
+            if self.canvas.find_withtag('norm_tabs'):
+                self.canvas.coords('norm_tabs', w - 22, 24)
 
     def render(self):
         w = max(20, int(self.curr_w))
@@ -582,7 +608,8 @@ class DynamicIslandHUD:
             36, cy, anchor='w',
             text=short_m,
             fill=HEX_TEXT_SECONDARY,
-            font=(FONT_NAME, 9, 'bold')
+            font=(FONT_NAME, 9, 'bold'),
+            tags='min_left'
         )
 
         tot_tok = self.stats['prompt'] + self.stats['completion']
@@ -594,7 +621,8 @@ class DynamicIslandHUD:
             w - 24, cy, anchor='e',
             text=right_text,
             fill=HEX_TEXT_PRIMARY,
-            font=(FONT_NAME, 9, 'bold')
+            font=(FONT_NAME, 9, 'bold'),
+            tags='min_right'
         )
 
     # --- VIEW: NORMAL ---
@@ -626,7 +654,8 @@ class DynamicIslandHUD:
             w - 22, 64, anchor='e',
             text=f"${cost:.2f}  |  {format_num(reqs)} reqs",
             fill=HEX_BLUE,
-            font=(FONT_NAME, 12, 'bold')
+            font=(FONT_NAME, 12, 'bold'),
+            tags='norm_right'
         )
 
         recent = self.stats['recent']
@@ -641,14 +670,16 @@ class DynamicIslandHUD:
             22, 104, anchor='w',
             text=ticker_txt,
             fill=HEX_TEXT_SECONDARY,
-            font=(FONT_NAME, 9)
+            font=(FONT_NAME, 9),
+            tags='norm_ticker'
         )
 
         self.canvas.create_text(
             w - 22, 104, anchor='e',
             text='▾ Full',
             fill=HEX_TEXT_MUTED,
-            font=(FONT_NAME, 9, 'bold')
+            font=(FONT_NAME, 9, 'bold'),
+            tags='norm_expand'
         )
 
     # --- VIEW: DETAILED ---
