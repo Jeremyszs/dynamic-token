@@ -80,6 +80,9 @@ class HUDController(QObject):
     @Property(int, notify=viewChanged)
     def targetWidth(self):
         pw, _, _ = TKINTER_PHYSICAL_SPECS[self._current_view]
+        # Stretch min view when hovered with cursor (320px -> 350px physical)
+        if self._current_view == 'min' and self._is_hovered:
+            pw = 350
         return self.scaling.dp(pw)
 
     @Property(int, notify=viewChanged)
@@ -180,6 +183,8 @@ class HUDController(QObject):
         if self._is_hovered != val:
             self._is_hovered = val
             self.hoveredChanged.emit()
+            if self._current_view == 'min':
+                self.viewChanged.emit()
 
     @Property(int, notify=viewChanged)
     def targetX(self):
