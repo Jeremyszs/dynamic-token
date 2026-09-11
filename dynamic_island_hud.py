@@ -13,6 +13,7 @@ import webbrowser
 import subprocess
 import winreg
 import tkinter as tk
+from tkinter import font as tkfont
 from PIL import Image, ImageDraw, ImageTk
 import win32gui
 import win32con
@@ -76,10 +77,11 @@ PIL_RIM_GLOW_ERROR_RGB = (255, 69, 58)
 RASTER_SCALE = 2
 
 # Fixed / Static Window Dimensions (No scrolling, perfectly fits all cards)
+# Detailed view width widened to 660px for extra breathing room across long email handles and model names
 VIEW_SPECS = {
     'min': (320, 42, 21),
     'normal': (520, 136, 26),
-    'detailed': (630, 540, 28)
+    'detailed': (660, 540, 28)
 }
 
 SWP_NOSIZE = 0x0001
@@ -148,6 +150,38 @@ def clean_provider_name(p):
     if p.startswith('anthropic-compatible'): return 'Anthropic'
     return p.capitalize()
 
+def clean_model_display_name(m):
+    if not m: return '--'
+    # Strip verbose provider prefixes and UUIDs (e.g. openai-compatible-responses-uuid/deepseek-v4 -> deepseek-v4)
+    if '/' in m:
+        parts = m.split('/')
+        if len(parts[-1]) >= 3:
+            m = parts[-1]
+    return m
+
+def truncate_text_to_pixel_width(font_obj, text, max_px):
+    if not text or max_px <= 10:
+        return ""
+    w = font_obj.measure(text)
+    if w <= max_px:
+        return text
+    # Binary search or trim from end with ellipsis
+    ell = ".."
+    ell_w = font_obj.measure(ell)
+    avail = max(0, max_px - ell_w)
+    low = 0
+    high = len(text)
+    best = ""
+    while low <= high:
+        mid = (low + high) // 2
+        sub = text[:mid]
+        if font_obj.measure(sub) <= avail:
+            best = sub
+            low = mid + 1
+        else:
+            high = mid - 1
+    return best + ell
+
 class DynamicIslandHUD:
     def __init__(self):
         self.root = tk.Tk()
@@ -183,6 +217,17 @@ class DynamicIslandHUD:
 
         self.load_config()
 
+        # Cached Tkinter font objects for precise pixel-width measurement
+        self.font_cache = {
+            ('f', 7, 'bold'): tkfont.Font(family=FONT_NAME, size=7, weight='bold'),
+            ('f', 8, 'normal'): tkfont.Font(family=FONT_NAME, size=8),
+            ('f', 8, 'bold'): tkfont.Font(family=FONT_NAME, size=8, weight='bold'),
+            ('f', 9, 'normal'): tkfont.Font(family=FONT_NAME, size=9),
+            ('f', 9, 'bold'): tkfont.Font(family=FONT_NAME, size=9, weight='bold'),
+            ('f', 10, 'bold'): tkfont.Font(family=FONT_NAME, size=10, weight='bold'),
+            ('f', 11, 'bold'): tkfont.Font(family=FONT_NAME, size=11, weight='bold'),
+        }
+
         w, h, r = VIEW_SPECS[self.current_view]
         self.curr_w = float(w)
         self.curr_h = float(h)
@@ -197,6 +242,15 @@ class DynamicIslandHUD:
         else:
             self.target_x = float(self.pos_x)
             self.target_y = float(self.pos_y)
+
+        # Multi-monitor bounds clamp on startup so expanded detailed view never bleeds off-screen
+        try:
+            hmon = win32api.MonitorFromPoint((int(self.target_x), int(self.target_y)), win32con.MONITOR_DEFAULTTONEAREST)
+            mon_info = win32api.GetMonitorInfo(hmon)['Work']
+            self.target_x = max(float(mon_info[0] + 10), min(float(mon_info[2] - w - 10), self.target_x))
+            self.target_y = max(float(mon_info[1] + 10), min(float(mon_info[3] - h - 10), self.target_y))
+        except Exception:
+            pass
 
         self.curr_x = self.target_x
         self.curr_y = self.target_y
@@ -1247,16 +1301,8 @@ class DynamicIslandHUD:
         self.place_dot(20, cy)
 
         raw_m = self.stats['latest_model']
-        short_m = raw_m.replace('gemini-', '').replace('flash-', 'f').replace('thinking', 'thk')
-        if len(short_m) > 14:
-            short_m = short_m[:12] + '..'
-        self.canvas.create_text(
-            36, cy, anchor='w',
-            text=short_m,
-            fill=HEX_TEXT_SECONDARY,
-            font=(FONT_NAME, 9, 'bold'),
-            tags='min_left'
-        )
+        clean_m = clean_model_display_name(raw_m)
+        short_m = clean_m.replace('gemini-', '').replace('flash-', 'f').replace('thinking', 'thk')
 
         is_split = (self.split_morph_progress > 0.01)
         gap = int(self.split_bubble_gap * self.split_morph_progress)
@@ -1284,7 +1330,22 @@ class DynamicIslandHUD:
             right_text = f"{tok_str} tok • {cost_str}"
             text_color = HEX_TEXT_PRIMARY
 
+        f9b = self.font_cache[('f', 9, 'bold')]
+        right_w = f9b.measure(right_text)
         right_anchor_x = (main_w - 18) if is_split else (w - 24)
+
+        # Responsive calculation of available width for left model text
+        avail_left_w = max(40, (right_anchor_x - right_w - 14) - 36)
+        disp_m = truncate_text_to_pixel_width(f9b, short_m, avail_left_w)
+
+        self.canvas.create_text(
+            36, cy, anchor='w',
+            text=disp_m,
+            fill=HEX_TEXT_SECONDARY,
+            font=(FONT_NAME, 9, 'bold'),
+            tags='min_left'
+        )
+
         self.canvas.create_text(
             right_anchor_x, cy, anchor='e',
             text=right_text,
@@ -1310,10 +1371,18 @@ class DynamicIslandHUD:
     def render_normal(self, w, h):
         self.place_dot(22, 24)
 
+        # Timeline tabs sit on the right at w - 22, taking ~160px
+        tabs_w = 170
+        avail_title_w = (w - 22 - tabs_w - 14) - 40
+        f10b = self.font_cache[('f', 10, 'bold')]
+
         raw_m = self.stats['latest_model']
+        clean_m = clean_model_display_name(raw_m)
+        disp_m = truncate_text_to_pixel_width(f10b, clean_m, avail_title_w)
+
         self.canvas.create_text(
             40, 24, anchor='w',
-            text=raw_m,
+            text=disp_m,
             fill=HEX_TEXT_PRIMARY,
             font=(FONT_NAME, 10, 'bold')
         )
@@ -1357,13 +1426,18 @@ class DynamicIslandHUD:
                 if tot_ms > 0:
                     lat_info = f" • {tot_ms / 1000.0:.1f}s"
             spd_info = f" • {self.latest_tps:.0f} tok/s" if getattr(self, 'latest_tps', None) else ""
-            ticker_txt = f"Last: {t_ago} • {last_call[3]} • +{format_num(last_call[4] + last_call[5])} tok{lat_info}{spd_info}"
+            m_cleaned = clean_model_display_name(last_call[3])
+            ticker_txt = f"Last: {t_ago} • {m_cleaned} • +{format_num(last_call[4] + last_call[5])} tok{lat_info}{spd_info}"
         else:
             ticker_txt = "Listening for API calls..."
 
+        f9 = self.font_cache[('f', 9, 'normal')]
+        avail_ticker_w = (w - 22 - 38) - 22
+        disp_ticker = truncate_text_to_pixel_width(f9, ticker_txt, avail_ticker_w)
+
         self.canvas.create_text(
             22, 104, anchor='w',
-            text=ticker_txt,
+            text=disp_ticker,
             fill=HEX_TEXT_SECONDARY,
             font=(FONT_NAME, 9),
             tags='norm_ticker'
@@ -1611,9 +1685,17 @@ class DynamicIslandHUD:
 
             # Line 1 (y=pool_box_y + 16): Responsive Account Name & Status Badge
             # Email is on left. Status badge is drawn as a dedicated Apple capsule pill tag at the right of the column
-            disp_email = acc_name
-            if len(disp_email) > 22:
-                disp_email = disp_email[:20] + '..'
+            status_tag_text = f"P{displayed_acc.get('priority', 1)}  •  {status_text}"
+            tag_w = len(status_tag_text) * 6 + 18
+            tag_x2 = box_x1 + 16 + max_left_w
+            tag_x1 = tag_x2 - tag_w
+            tag_fill = '#0B2915' if is_curr else ('#1A1A1D' if is_on else '#241416')
+            tag_border = '#144D26' if is_curr else ('#333336' if is_on else '#4A1E22')
+            tag_fg = HEX_GREEN if is_curr else (HEX_TEXT_PRIMARY if is_on else HEX_TEXT_MUTED)
+
+            f10b = self.font_cache[('f', 10, 'bold')]
+            avail_email_w = (tag_x1 - 12) - (box_x1 + 16)
+            disp_email = truncate_text_to_pixel_width(f10b, acc_name, avail_email_w)
 
             # 1. Email text (Anchor 'w' on left)
             self.canvas.create_text(
@@ -1624,27 +1706,26 @@ class DynamicIslandHUD:
             )
 
             # 2. Apple status pill badge anchored on the right of the left sub-section
-            status_tag_text = f"P{displayed_acc.get('priority', 1)}  •  {status_text}"
-            tag_w = len(status_tag_text) * 6 + 18
-            tag_x2 = box_x1 + 16 + max_left_w
-            tag_x1 = tag_x2 - tag_w
-            tag_fill = '#0B2915' if is_curr else ('#1A1A1D' if is_on else '#241416')
-            tag_border = '#144D26' if is_curr else ('#333336' if is_on else '#4A1E22')
-            tag_fg = HEX_GREEN if is_curr else (HEX_TEXT_PRIMARY if is_on else HEX_TEXT_MUTED)
-
             self.draw_pill_button_styled(tag_x1, pool_box_y + 6, tag_x2, pool_box_y + 24, status_tag_text,
                                         callback=lambda: None, fill=tag_fill, fg=tag_fg, border=tag_border, radius=6)
 
             # Line 2 (y=pool_box_y + 38): Current Quota Status (Label + Reset countdown on left, Figures on right)
+            quota_acc_str = f"{format_num(acc_quota_used)} / {format_num(acc_limit)} ({acc_pct:.1f}%)"
+            quota_val_color = '#FF453A' if acc_pct >= 90 else ('#FF9F0A' if acc_pct >= 75 else HEX_TEXT_PRIMARY)
+            f8b = self.font_cache[('f', 8, 'bold')]
+            f7b = self.font_cache[('f', 7, 'bold')]
+            quota_str_w = f8b.measure(quota_acc_str)
+
+            avail_lbl_w = max(40, max_left_w - quota_str_w - 14)
             quota_label_txt = f"QUOTA  •  {reset_time_left_str}" if reset_time_left_str else "CURRENT QUOTA"
+            disp_quota_lbl = truncate_text_to_pixel_width(f7b, quota_label_txt, avail_lbl_w)
+
             self.canvas.create_text(
                 box_x1 + 16, pool_box_y + 38, anchor='w',
-                text=quota_label_txt,
+                text=disp_quota_lbl,
                 fill=HEX_TEXT_MUTED,
                 font=(FONT_NAME, 7, 'bold')
             )
-            quota_acc_str = f"{format_num(acc_quota_used)} / {format_num(acc_limit)} ({acc_pct:.1f}%)"
-            quota_val_color = '#FF453A' if acc_pct >= 90 else ('#FF9F0A' if acc_pct >= 75 else HEX_TEXT_PRIMARY)
             self.canvas.create_text(
                 box_x1 + 16 + max_left_w, pool_box_y + 38, anchor='e',
                 text=quota_acc_str,
@@ -1711,13 +1792,23 @@ class DynamicIslandHUD:
         sorted_models = sorted(self.stats['models'].items(), key=lambda item: item[1]['prompt'], reverse=True)[:3]
 
         bar_y = models_header_y + 24
+        f9 = self.font_cache[('f', 9, 'normal')]
+        f8 = self.font_cache[('f', 8, 'normal')]
         for m_name, mdata in sorted_models:
             p_val = mdata['prompt'] + mdata['completion']
             r_val = mdata['requests']
             ratio = min(1.0, p_val / (tot_tok if tot_tok > 0 else 1))
 
-            self.canvas.create_text(24, bar_y, anchor='w', text=m_name, fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 9))
-            self.canvas.create_text(w - 24, bar_y, anchor='e', text=f"{format_num(p_val)} tok ({r_val} reqs)", fill=HEX_TEXT_SECONDARY, font=(FONT_NAME, 8))
+            right_stat_str = f"{format_num(p_val)} tok ({r_val} reqs)"
+            right_stat_w = f8.measure(right_stat_str)
+
+            # Available width for model name: from x=24 up to (w - 24 - right_stat_w - 16)
+            avail_model_w = (w - 24 - right_stat_w - 16) - 24
+            clean_m = clean_model_display_name(m_name)
+            disp_m = truncate_text_to_pixel_width(f9, clean_m, avail_model_w)
+
+            self.canvas.create_text(24, bar_y, anchor='w', text=disp_m, fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 9))
+            self.canvas.create_text(w - 24, bar_y, anchor='e', text=right_stat_str, fill=HEX_TEXT_SECONDARY, font=(FONT_NAME, 8))
 
             bar_w_max = w - 48
             track_y1 = bar_y + 14
@@ -1744,8 +1835,16 @@ class DynamicIslandHUD:
             badge_fg = HEX_GREEN if st == 'ok' else '#FF453A'
             self.draw_pill_button_styled(24, feed_y - 2, 24 + 52, feed_y + 16, '200 OK' if st == 'ok' else 'ERR', callback=lambda: None, fill=badge_fill, fg=badge_fg, border=badge_border, radius=6)
 
-            self.canvas.create_text(86, feed_y + 7, anchor='w', text=f"{m_tag}", fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 9))
-            self.canvas.create_text(w - 24, feed_y + 7, anchor='e', text=f"+{format_num(toks)} tok • {t_ago}", fill=HEX_TEXT_SECONDARY, font=(FONT_NAME, 9))
+            right_feed_str = f"+{format_num(toks)} tok • {t_ago}"
+            right_feed_w = f9.measure(right_feed_str)
+
+            # Available width for model label between badge (x=86) and right stats
+            avail_feed_m_w = (w - 24 - right_feed_w - 16) - 86
+            clean_feed_m = clean_model_display_name(m_tag)
+            disp_feed_m = truncate_text_to_pixel_width(f9, clean_feed_m, avail_feed_m_w)
+
+            self.canvas.create_text(86, feed_y + 7, anchor='w', text=disp_feed_m, fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 9))
+            self.canvas.create_text(w - 24, feed_y + 7, anchor='e', text=right_feed_str, fill=HEX_TEXT_SECONDARY, font=(FONT_NAME, 9))
             feed_y += 22
 
     # --- UI Helpers & Rounded Card Rasterizers ---
