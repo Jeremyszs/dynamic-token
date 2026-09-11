@@ -15,16 +15,22 @@ def main():
     app.setApplicationName("Dynamic Token HUD")
     app.setOrganizationName("DynamicToken")
 
-    # 2. Register Apple SF Pro Display fonts
+    # 2. Register Apple SF Pro Display fonts into QFontDatabase & set default application font
     base_dir = os.path.dirname(os.path.abspath(__file__))
     fonts_dir = os.path.join(base_dir, "..", "fonts")
     if not os.path.exists(fonts_dir):
         fonts_dir = os.path.join(base_dir, "resources", "fonts")
     
+    font_family = "Segoe UI"
     if os.path.exists(fonts_dir):
         for font_file in os.listdir(fonts_dir):
             if font_file.endswith((".otf", ".ttf")):
-                QFontDatabase.addApplicationFont(os.path.join(fonts_dir, font_file))
+                fid = QFontDatabase.addApplicationFont(os.path.join(fonts_dir, font_file))
+                fams = QFontDatabase.applicationFontFamilies(fid)
+                if fams:
+                    font_family = fams[0]
+
+    app.setFont(font_family)
 
     # 3. Create Backend Controller
     controller = HUDController()

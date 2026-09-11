@@ -28,7 +28,7 @@ Item {
             text: controller.cleanLatestModel
             color: "#FFFFFF"
             font.family: "SF Pro Display"
-            font.pixelSize: 10
+            font.pixelSize: 11
             font.bold: true
             elide: Text.ElideRight
             width: parent.width - 26
@@ -56,7 +56,7 @@ Item {
         text: controller.totalTokensStr + " Tokens"
         color: "#FFFFFF"
         font.family: "SF Pro Display"
-        font.pixelSize: 15
+        font.pixelSize: 16
         font.bold: true
     }
 
@@ -67,7 +67,7 @@ Item {
         anchors.verticalCenter: bigTokens.verticalCenter
         color: controller.flyingDeltaText !== "" ? "#30D158" : "#FFFFFF"
         font.family: "SF Pro Display"
-        font.pixelSize: 11
+        font.pixelSize: 12
         font.bold: true
         text: controller.flyingDeltaText !== "" ? controller.flyingDeltaText : (controller.costStr + "  |  " + controller.requestsStr + " reqs")
     }
@@ -84,7 +84,7 @@ Item {
         text: controller.tickerText
         color: "#A1A1A6"
         font.family: "SF Pro Display"
-        font.pixelSize: 9
+        font.pixelSize: 10
         elide: Text.ElideRight
     }
 
@@ -96,7 +96,7 @@ Item {
         text: "Full"
         color: "#58585E"
         font.family: "SF Pro Display"
-        font.pixelSize: 9
+        font.pixelSize: 10
         font.bold: true
     }
 }

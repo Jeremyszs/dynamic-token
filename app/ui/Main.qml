@@ -70,10 +70,10 @@ Window {
 
             Text {
                 anchors.centerIn: parent
-                text: controller.latestTps > 0 ? ("⚡ " + Math.round(controller.latestTps)) : "⚡"
+                text: controller.latestTps > 0 ? (Math.round(controller.latestTps) + " tok/s") : "tok/s"
                 color: "#FF9F0A"
                 font.family: "SF Pro Display"
-                font.pixelSize: 9
+                font.pixelSize: 10
                 font.bold: true
             }
 

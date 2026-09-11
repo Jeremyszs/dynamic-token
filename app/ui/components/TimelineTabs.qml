@@ -34,7 +34,7 @@ Row {
                 text: tabBtn.modelData.label
                 color: root.currentTimeline === tabBtn.modelData.key ? "#FFFFFF" : "#58585E"
                 font.family: "SF Pro Display"
-                font.pixelSize: 8
+                font.pixelSize: 10
                 font.bold: true
             }
 

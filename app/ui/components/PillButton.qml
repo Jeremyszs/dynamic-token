@@ -28,7 +28,7 @@ Rectangle {
         anchors.centerIn: parent
         color: root.textColor
         font.family: "SF Pro Display"
-        font.pixelSize: 8
+        font.pixelSize: 10
         font.bold: true
         elide: Text.ElideRight
     }

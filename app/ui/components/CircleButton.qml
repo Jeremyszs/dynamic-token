@@ -2,7 +2,7 @@ import QtQuick
 
 Rectangle {
     id: root
-    property string iconType: "text" // "text", "close", "minimize", "refresh"
+    property string iconType: "text" // "text", "close", "minimize", "left", "right"
     property string buttonText: ""
     property color normalColor: "#1C1C1E"
     property color hoverColor: "#2C2C30"
@@ -29,8 +29,50 @@ Rectangle {
         text: root.buttonText
         color: root.iconColor
         font.family: "SF Pro Display"
-        font.pixelSize: 8
+        font.pixelSize: 10
         font.bold: true
+    }
+
+    // Vector Chevron Left
+    Canvas {
+        anchors.fill: parent
+        visible: root.iconType === "left"
+        onPaint: {
+            var ctx = getContext("2d");
+            ctx.reset();
+            ctx.strokeStyle = root.iconColor;
+            ctx.lineWidth = 1.6;
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            var cx = width / 2;
+            var cy = height / 2;
+            ctx.beginPath();
+            ctx.moveTo(cx + 2, cy - 4);
+            ctx.lineTo(cx - 2, cy);
+            ctx.lineTo(cx + 2, cy + 4);
+            ctx.stroke();
+        }
+    }
+
+    // Vector Chevron Right
+    Canvas {
+        anchors.fill: parent
+        visible: root.iconType === "right"
+        onPaint: {
+            var ctx = getContext("2d");
+            ctx.reset();
+            ctx.strokeStyle = root.iconColor;
+            ctx.lineWidth = 1.6;
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            var cx = width / 2;
+            var cy = height / 2;
+            ctx.beginPath();
+            ctx.moveTo(cx - 2, cy - 4);
+            ctx.lineTo(cx + 2, cy);
+            ctx.lineTo(cx - 2, cy + 4);
+            ctx.stroke();
+        }
     }
 
     // Vector Close (Geometric cross)

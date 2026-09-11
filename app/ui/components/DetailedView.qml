@@ -184,7 +184,7 @@ Item {
 
                 PillButton {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "⟳ Refresh"
+                    text: "Refresh"
                     normalColor: "#1C1C1F"
                     textColor: "#A1A1A6"
                     borderColor: "#333338"
@@ -214,28 +214,26 @@ Item {
                     }
                 }
 
-                CircleButton {
-                    anchors.verticalCenter: parent.verticalCenter
-                    buttonText: "‹"
-                    radiusSize: 10
-                    onClicked: controller.prevProvider()
-                }
+        CircleButton {
+            iconType: "left"
+            radiusSize: 10
+            onClicked: controller.prevProvider()
+        }
 
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: controller.currentProvider.clean_name + " (" + (controller.selectedProviderIndex + 1) + "/" + controller.providersList.length + ")"
-                    color: "#FFFFFF"
-                    font.family: "SF Pro Display"
-                    font.pixelSize: 8
-                    font.bold: true
-                }
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text: controller.currentProvider.clean_name + " (" + (controller.selectedProviderIndex + 1) + "/" + controller.providersList.length + ")"
+            color: "#FFFFFF"
+            font.family: "SF Pro Display"
+            font.pixelSize: 9
+            font.bold: true
+        }
 
-                CircleButton {
-                    anchors.verticalCenter: parent.verticalCenter
-                    buttonText: "›"
-                    radiusSize: 10
-                    onClicked: controller.nextProvider()
-                }
+        CircleButton {
+            iconType: "right"
+            radiusSize: 10
+            onClicked: controller.nextProvider()
+        }
             }
         }
 
@@ -276,7 +274,7 @@ Item {
                         text: controller.currentAccount.full_email || "No accounts registered"
                         color: "#FFFFFF"
                         font.family: "SF Pro Display"
-                        font.pixelSize: 10
+                        font.pixelSize: 11
                         font.bold: true
                         elide: Text.ElideRight
                         width: parent.width - statusPill.width - 10
@@ -285,8 +283,8 @@ Item {
                     Rectangle {
                         id: statusPill
                         anchors.verticalCenter: parent.verticalCenter
-                        width: statusText.implicitWidth + 12
-                        height: 18
+                        width: statusText.implicitWidth + 14
+                        height: 20
                         radius: 6
                         color: controller.currentAccount.is_current ? "#0B2915" : (controller.currentAccount.is_active ? "#1A1A1D" : "#241416")
                         border.color: controller.currentAccount.is_current ? "#144D26" : (controller.currentAccount.is_active ? "#333336" : "#4A1E22")
@@ -298,7 +296,7 @@ Item {
                             text: "P" + (controller.currentAccount.priority || 1) + " • " + (controller.currentAccount.is_current ? "Active Route" : (controller.currentAccount.is_active ? "Standby Ready" : "Disabled"))
                             color: controller.currentAccount.is_current ? "#30D158" : (controller.currentAccount.is_active ? "#FFFFFF" : "#58585E")
                             font.family: "SF Pro Display"
-                            font.pixelSize: 7
+                            font.pixelSize: 8
                             font.bold: true
                         }
                     }
@@ -319,7 +317,7 @@ Item {
                         text: controller.currentAccount.reset_time_left ? ("QUOTA  •  " + controller.currentAccount.reset_time_left) : "CURRENT QUOTA"
                         color: "#58585E"
                         font.family: "SF Pro Display"
-                        font.pixelSize: 7
+                        font.pixelSize: 8
                         font.bold: true
                     }
 
@@ -329,7 +327,7 @@ Item {
                         text: (controller.currentAccount.used_str || "0") + " / " + (controller.currentAccount.limit_str || "0") + " (" + (controller.currentAccount.used_pct_str || "0.0%") + ")"
                         color: (controller.currentAccount.used_pct >= 90) ? "#FF453A" : ((controller.currentAccount.used_pct >= 75) ? "#FF9F0A" : "#FFFFFF")
                         font.family: "SF Pro Display"
-                        font.pixelSize: 8
+                        font.pixelSize: 9
                         font.bold: true
                     }
                 }

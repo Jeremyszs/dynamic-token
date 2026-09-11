@@ -26,7 +26,7 @@ Item {
         text: controller.cleanLatestModel
         color: "#A1A1A6"
         font.family: "SF Pro Display"
-        font.pixelSize: 9
+        font.pixelSize: 10
         font.bold: true
         elide: Text.ElideRight
     }
@@ -43,7 +43,7 @@ Item {
             return "#FFFFFF";
         }
         font.family: "SF Pro Display"
-        font.pixelSize: 9
+        font.pixelSize: 10
         font.bold: true
         text: {
             if (controller.flyingDeltaText !== "") {
