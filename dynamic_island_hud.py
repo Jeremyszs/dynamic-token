@@ -245,6 +245,8 @@ class DynamicIslandHUD:
         self.last_rd_rowid = 0
         self.latest_tps = None
         self.is_9router_running = False
+        self.live_quotas_cache = {}
+        self._last_live_quota_fetch = 0.0
 
         self.check_startup_registration()
         self.fetch_database_data()
@@ -531,6 +533,25 @@ class DynamicIslandHUD:
             self.fetch_database_data()
         except Exception:
             pass
+
+    def fetch_live_quota_for_connection(self, conn_id):
+        if not self.is_9router_running or not conn_id:
+            return None
+        now = time.time()
+        cached = self.live_quotas_cache.get(conn_id)
+        if cached and (now - cached['time']) < 15.0:
+            return cached['data']
+        try:
+            url = f'http://127.0.0.1:20128/api/usage/{conn_id}'
+            req = urllib.request.Request(url, headers={'User-Agent': 'DynamicTokenHUD/1.0'})
+            with urllib.request.urlopen(req, timeout=1.2) as resp:
+                if resp.status == 200:
+                    data = json.loads(resp.read())
+                    self.live_quotas_cache[conn_id] = {'time': now, 'data': data}
+                    return data
+        except Exception:
+            pass
+        return cached['data'] if cached else None
 
     def fetch_database_data(self):
         try:
@@ -1194,13 +1215,13 @@ class DynamicIslandHUD:
         pool_header_y = 154
         self.canvas.create_text(24, pool_header_y, anchor='w', text='ACCOUNT MANAGER', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
 
-        # Dedicated Refresh Pill Button with visible text and click feedback
+        # Dedicated Refresh Pill Button with visible text and click feedback (x1=182 gives clean 20px gap from title)
         is_recently_refreshed = (time.time() - getattr(self, '_last_refresh_click', 0)) < 1.2
         ref_text = "✓ Updated" if is_recently_refreshed else "⟳ Refresh"
         ref_fg = HEX_GREEN if is_recently_refreshed else HEX_TEXT_SECONDARY
         ref_bg = '#142A1A' if is_recently_refreshed else '#1C1C1F'
         ref_border = '#1E5E2A' if is_recently_refreshed else '#333338'
-        self.draw_pill_button_styled(172, pool_header_y - 10, 246, pool_header_y + 10, ref_text,
+        self.draw_pill_button_styled(182, pool_header_y - 10, 256, pool_header_y + 10, ref_text,
                                     callback=self.trigger_refresh, fill=ref_bg, fg=ref_fg, border=ref_border, radius=8)
 
         providers = self.stats.get('providers_data', [])
@@ -1296,11 +1317,33 @@ class DynamicIslandHUD:
             status_text = "Active Route" if is_curr else ("Standby Ready" if is_on else "Disabled")
             status_color = HEX_GREEN if is_curr else (HEX_TEXT_PRIMARY if is_on else HEX_TEXT_MUTED)
 
-            # CURRENT QUOTA: Strictly current day usage, NOT multiplied/filtered by timeline
-            acc_quota_used = displayed_acc.get('quota_toks', 0)
+            # CURRENT QUOTA: Check live 9router quota first (tracks resets accurately), fallback to daily ledger
+            disp_cid = displayed_acc.get('id')
+            live_data = self.fetch_live_quota_for_connection(disp_cid)
+            live_quota_used_pct = None
+            if live_data and 'quotas' in live_data:
+                # Find matching model quota from 9router (e.g. gemini-3.8-flash-high or main quota)
+                q_dict = live_data['quotas']
+                best_q = None
+                latest_m = self.stats.get('latest_model', '')
+                for m_candidate in [latest_m, 'gemini-3.8-flash-high', 'claude-opus-4-6-thinking', 'gpt-5.6-luna']:
+                    if m_candidate in q_dict:
+                        best_q = q_dict[m_candidate]
+                        break
+                if not best_q and q_dict:
+                    best_q = next(iter(q_dict.values()))
+                if best_q and 'remainingPercentage' in best_q:
+                    live_quota_used_pct = max(0.0, min(100.0, 100.0 - float(best_q['remainingPercentage'])))
+
             acc_limit = self.get_account_quota_limit(prov_raw, acc_name)
-            acc_ratio = min(1.0, acc_quota_used / (acc_limit if acc_limit > 0 else 1))
-            acc_pct = (acc_quota_used / acc_limit * 100.0) if acc_limit > 0 else 0.0
+            if live_quota_used_pct is not None:
+                acc_pct = live_quota_used_pct
+                acc_ratio = acc_pct / 100.0
+                acc_quota_used = int(acc_limit * acc_ratio)
+            else:
+                acc_quota_used = displayed_acc.get('quota_toks', 0)
+                acc_ratio = min(1.0, acc_quota_used / (acc_limit if acc_limit > 0 else 1))
+                acc_pct = (acc_quota_used / acc_limit * 100.0) if acc_limit > 0 else 0.0
 
             # TIMELINE SYNCHRONIZED TOKENS: Synchronized with timeline selection (today, 7D, 30D, All)
             timeline_toks = displayed_acc.get('toks', 0)
@@ -1545,6 +1588,8 @@ class DynamicIslandHUD:
 
     def trigger_refresh(self):
         self._last_refresh_click = time.time()
+        # Invalidate live quota cache so it immediately queries 9router for the latest reset quota
+        self.live_quotas_cache.clear()
         self.fetch_database_data()
         self.check_9router_health()
         self.is_dirty = True
