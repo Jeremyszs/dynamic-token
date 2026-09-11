@@ -332,7 +332,22 @@ class DynamicIslandHUD:
         self.target_x = max(float(m_left + 10), min(float(m_right - tw - 10), self.anchor_center_x - (tw / 2.0)))
         self.target_y = max(float(m_top + 10), min(float(m_bottom - th - 10), self.curr_y))
 
-        # Render capsule at current starting dimensions so the window shape is continuous
+        # Render target components immediately on click (eliminates all latency/delay)
+        self.hit_zones.clear()
+        for item in self.canvas.find_all():
+            if 'bg' not in self.canvas.gettags(item):
+                self.canvas.delete(item)
+
+        if self.current_view == 'min':
+            self.render_min(int(tw), int(th))
+        elif self.current_view == 'normal':
+            self.render_normal(int(tw), int(th))
+        else:
+            self.render_detailed(int(tw), int(th))
+
+        self.canvas.tag_lower('bg')
+
+        # Keep capsule background at exact CURRENT dimensions so there is zero corner jumping
         self.update_morph_layout(int(self.curr_w), int(self.curr_h), int(self.curr_r))
         self.is_animating = True
         self.is_dirty = False
