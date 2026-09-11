@@ -5,90 +5,92 @@ Item {
     id: root
     anchors.fill: parent
 
-    // In Tkinter: place_dot(22, 24)
+    // Top row: Status dot at x=14, y=10
     StatusDot {
         id: statusDot
-        x: 12
-        y: 14
+        x: 14
+        y: 12
         active: controller.isActivityActive
         error: controller.isActivityError
     }
 
-    // In Tkinter: canvas.create_text(40, 24, anchor='w', text=raw_m, font=(FONT_NAME, 10, 'bold'), fill=HEX_TEXT_PRIMARY)
+    // Model name at x=34, font size 14 bold white
     Text {
         id: modelTitle
-        x: 40
-        y: 24 - (implicitHeight / 2)
-        text: controller.cleanLatestModel
-        color: "#FFFFFF"
+        x: 34
+        anchors.verticalCenter: statusDot.verticalCenter
+        text: controller.latestModel
+        color: "#ffffff"
         font.family: "SF Pro Display"
-        font.pixelSize: 10
+        font.pixelSize: 14
         font.bold: true
         elide: Text.ElideRight
-        width: timelineTabs.x - 40 - 12
+        width: timelineTabs.x - 34 - 12
     }
 
-    // In Tkinter: render_timeline_tabs(w - 22, 24, anchor='e')
+    // Timeline Tabs at top right
     TimelineTabs {
         id: timelineTabs
         anchors.right: parent.right
-        anchors.rightMargin: 22
-        anchors.verticalCenter: modelTitle.verticalCenter
+        anchors.rightMargin: 14
+        anchors.verticalCenter: statusDot.verticalCenter
         currentTimeline: controller.timeline
         onTimelineSelected: function(key) {
             controller.setTimeline(key);
         }
     }
 
-    // In Tkinter: canvas.create_text(22, 64, anchor='w', text=f"{format_num(tot_tok)} Tokens", font=(FONT_NAME, 16, 'bold'))
+    // Middle row (pady=4): Primary Metrics
+    // "92.3M Tokens" on left at x=14, y=44 (font size 22 bold)
     Text {
         id: bigTokens
-        x: 22
-        y: 64 - (implicitHeight / 2)
+        x: 14
+        y: 44
         text: controller.totalTokensStr + " Tokens"
-        color: "#FFFFFF"
+        color: "#ffffff"
         font.family: "SF Pro Display"
-        font.pixelSize: 16
+        font.pixelSize: 22
         font.bold: true
     }
 
-    // In Tkinter: canvas.create_text(w - 22, 64, anchor='e', text=norm_right_text, font=(FONT_NAME, 12, 'bold'))
+    // "$23.03 | 457 reqs" on right at x=w-14, y=48 (font size 16 bold)
     Text {
         id: costAndReqs
         anchors.right: parent.right
-        anchors.rightMargin: 22
-        y: 64 - (implicitHeight / 2)
-        color: controller.flyingDeltaText !== "" ? "#30D158" : "#FFFFFF"
+        anchors.rightMargin: 14
+        anchors.baseline: bigTokens.baseline
+        color: controller.flyingDeltaText !== "" ? "#30D158" : "#ffffff"
         font.family: "SF Pro Display"
-        font.pixelSize: 12
+        font.pixelSize: 16
         font.bold: true
-        text: controller.flyingDeltaText !== "" ? controller.flyingDeltaText : (controller.costStr + "  |  " + controller.requestsStr + " reqs")
+        text: controller.flyingDeltaText !== "" ? controller.flyingDeltaText : (controller.costStr + " | " + controller.requestsStr + " reqs")
     }
 
-    // In Tkinter: canvas.create_text(22, 104, anchor='w', text=ticker_txt, font=(FONT_NAME, 9), tags='norm_ticker')
+    // Bottom row: Secondary telemetry
+    // "Last: 1m ago • gemini-3.8-flash-high • +390.4k tok • 22.9s • 183 tok/s" (font size 11, #808080)
     Text {
         id: tickerLabel
-        x: 22
-        y: 104 - (implicitHeight / 2)
+        x: 14
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 10
         anchors.right: expandHint.left
         anchors.rightMargin: 12
         text: controller.tickerText
-        color: "#A1A1A6"
+        color: "#808080"
         font.family: "SF Pro Display"
-        font.pixelSize: 9
+        font.pixelSize: 11
         elide: Text.ElideRight
     }
 
-    // In Tkinter: canvas.create_text(w - 22, 104, anchor='e', text='Full', font=(FONT_NAME, 9, 'bold'), fill=HEX_TEXT_MUTED)
+    // "Full" on right at x=w-14
     Text {
         id: expandHint
         anchors.right: parent.right
-        anchors.rightMargin: 22
-        y: 104 - (implicitHeight / 2)
+        anchors.rightMargin: 14
+        anchors.verticalCenter: tickerLabel.verticalCenter
         text: "Full"
-        color: "#58585E"
+        color: "#808080"
         font.family: "SF Pro Display"
-        font.pixelSize: 9
-        font.bold: true
+        font.pixelSize: 11
     }
 }

@@ -10,8 +10,8 @@ from .models import format_num, format_time_ago, format_time_left, clean_model_d
 CONFIG_PATH = os.path.expandvars(r'%LOCALAPPDATA%\hermes\dynamic_island_config.json')
 
 VIEW_SPECS = {
-    'min': (320, 42, 21),
-    'normal': (520, 136, 26),
+    'min': (290, 36, 18),
+    'normal': (486, 108, 16),
     'detailed': (660, 540, 28)
 }
 

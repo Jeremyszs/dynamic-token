@@ -4,7 +4,7 @@ Row {
     id: root
     property string currentTimeline: "today"
     signal timelineSelected(string key)
-    spacing: 4
+    spacing: 3
 
     readonly property var tabs: [
         { "key": "today", "label": "Today" },
@@ -18,11 +18,11 @@ Row {
         Rectangle {
             id: tabBtn
             required property var modelData
-            width: 38
+            width: tabText.implicitWidth + 14
             height: 20
-            radius: 10
-            color: root.currentTimeline === modelData.key ? "#2A2A2D" : "#121214"
-            border.color: root.currentTimeline === modelData.key ? "#3C3C40" : "#202023"
+            radius: 5
+            color: root.currentTimeline === modelData.key ? "#2a2a2a" : "#111111"
+            border.color: root.currentTimeline === modelData.key ? "#404040" : "#1a1a1a"
             border.width: 1
 
             Behavior on color {
@@ -30,11 +30,12 @@ Row {
             }
 
             Text {
+                id: tabText
                 anchors.centerIn: parent
                 text: tabBtn.modelData.label
-                color: root.currentTimeline === tabBtn.modelData.key ? "#FFFFFF" : "#58585E"
+                color: root.currentTimeline === tabBtn.modelData.key ? "#ffffff" : "#666666"
                 font.family: "SF Pro Display"
-                font.pixelSize: 10
+                font.pixelSize: 11
                 font.bold: true
             }
 
