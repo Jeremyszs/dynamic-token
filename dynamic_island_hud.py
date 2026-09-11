@@ -21,7 +21,10 @@ except Exception:
     pass
 
 # 2. Register Apple SF Pro Display Fonts into GDI session
-FONT_DIR = os.path.expandvars(r'%LOCALAPPDATA%\hermes\fonts')
+FONT_DIR = os.path.join(os.path.dirname(__file__), 'fonts')
+if not os.path.exists(FONT_DIR):
+    FONT_DIR = os.path.expandvars(r'%LOCALAPPDATA%\hermes\fonts')
+
 FONT_NAME = 'Segoe UI'
 try:
     gdi32 = ctypes.windll.gdi32
@@ -41,25 +44,47 @@ CONFIG_PATH = os.path.expandvars(r'%LOCALAPPDATA%\hermes\dynamic_island_config.j
 
 COLOR_TRANSPARENT = '#010101'
 
-HEX_BG = '#000000'
-HEX_BORDER = '#2C2C2E'
-HEX_BORDER_HOVER = '#48484A'
+# Color Themes
+THEMES = {
+    'pitch_black': {
+        'name': 'Pitch Black',
+        'bg_rgba': (0, 0, 0, 255),
+        'border_rgba': (44, 44, 46, 255),
+        'border_hover': (88, 88, 92, 255),
+        'card_bg_rgba': (21, 21, 23, 255),
+        'card_border_rgba': (44, 44, 46, 255),
+        'tab_active_rgba': (44, 44, 46, 255),
+        'tab_inactive_rgba': (22, 22, 24, 255),
+        'accent_blue': '#0A84FF',
+        'rim_glow_rgb': (48, 209, 88), # Apple Siri Green
+        'sheen': False
+    },
+    'liquid_glass': {
+        'name': 'Liquid Glass',
+        'bg_rgba': (10, 14, 22, 245), # Deep liquid glass
+        'border_rgba': (56, 189, 248, 90), # Studio blue specular hairline
+        'border_hover': (56, 189, 248, 160),
+        'card_bg_rgba': (16, 23, 38, 230),
+        'card_border_rgba': (56, 189, 248, 60),
+        'tab_active_rgba': (30, 41, 59, 255),
+        'tab_inactive_rgba': (15, 23, 42, 220),
+        'accent_blue': '#38BDF8', # Studio Blue (Litwave)
+        'rim_glow_rgb': (56, 189, 248), # Neon Cyan/Blue beam
+        'sheen': True
+    }
+}
+
 HEX_TEXT_PRIMARY = '#FFFFFF'
 HEX_TEXT_SECONDARY = '#98989D'
 HEX_TEXT_MUTED = '#636366'
 HEX_GREEN = '#30D158'
-HEX_BLUE = '#0A84FF'
 HEX_ORANGE = '#FF9F0A'
-HEX_BADGE_BG = '#151517'
-
-PIL_ISLAND_BG = (0, 0, 0, 255)
-PIL_BORDER = (44, 44, 46, 255)
-PIL_BORDER_HOVER = (88, 88, 92, 255)
+HEX_BORDER = '#2C2C2E'
 
 VIEW_SPECS = {
     'min': (320, 42, 21),
     'normal': (520, 136, 26),
-    'detailed': (620, 430, 28)
+    'detailed': (620, 440, 28)
 }
 
 SWP_NOZORDER = 0x0004
@@ -108,8 +133,11 @@ class DynamicIslandHUD:
 
         self.current_view = 'min'
         self.timeline = 'today'
+        self.theme_mode = 'pitch_black' # 'pitch_black' or 'liquid_glass'
         self.is_hovered = False
         self.last_activity_time = 0
+        self.last_delta_tokens = 0
+        self.last_delta_time = 0
 
         self.load_config()
 
@@ -121,7 +149,6 @@ class DynamicIslandHUD:
         self.target_h = float(h)
         self.target_r = float(r)
 
-        # Center X on current saved coordinates or default to primary center
         if self.pos_x is None:
             self.target_x = float((self.screen_w - int(w)) // 2)
             self.target_y = 16.0
@@ -131,18 +158,15 @@ class DynamicIslandHUD:
 
         self.curr_x = self.target_x
         self.curr_y = self.target_y
-
-        # Keep a steady center anchor so expanding never jumps monitors
         self.anchor_center_x = self.curr_x + (self.curr_w / 2.0)
 
-        # Velocities for spring physics
+        # Spring velocities
         self.vel_w = 0.0
         self.vel_h = 0.0
         self.vel_r = 0.0
         self.vel_x = 0.0
         self.vel_y = 0.0
 
-        # Initialize window geometry via native Win32 API
         self.root.update_idletasks()
         self.hwnd = int(self.root.frame(), 16) if hasattr(self.root, 'frame') else self.root.winfo_id()
         user32.SetWindowPos(self.hwnd, 0, int(self.curr_x), int(self.curr_y), int(self.curr_w), int(self.curr_h), SWP_NOZORDER | SWP_NOACTIVATE)
@@ -201,6 +225,7 @@ class DynamicIslandHUD:
         self.render()
 
         self.pulse_frame_idx = 0
+        self.rim_glow_phase = 0.0
         self.last_tick_time = time.perf_counter()
         self.tick_loop()
 
@@ -243,6 +268,7 @@ class DynamicIslandHUD:
                     self.pos_y = cfg.get('y')
                     self.current_view = cfg.get('view', 'min')
                     self.timeline = cfg.get('timeline', 'today')
+                    self.theme_mode = cfg.get('theme', 'pitch_black')
             except Exception:
                 pass
 
@@ -254,7 +280,8 @@ class DynamicIslandHUD:
                     'x': int(self.curr_x),
                     'y': int(self.curr_y),
                     'view': self.current_view,
-                    'timeline': self.timeline
+                    'timeline': self.timeline,
+                    'theme': self.theme_mode
                 }, f)
         except Exception:
             pass
@@ -269,10 +296,9 @@ class DynamicIslandHUD:
 
     def get_current_monitor_workarea(self):
         try:
-            # Query the exact native monitor displaying this window
             hmon = win32api.MonitorFromWindow(self.hwnd, win32con.MONITOR_DEFAULTTONEAREST)
             info = win32api.GetMonitorInfo(hmon)
-            return info['Work']  # (left, top, right, bottom)
+            return info['Work']
         except Exception:
             return (0, 0, self.screen_w, self.screen_h)
 
@@ -282,25 +308,27 @@ class DynamicIslandHUD:
         self.current_view = view_name
         tw, th, tr = VIEW_SPECS[view_name]
 
-        # Fetch the active monitor's work area directly from Win32
         m_left, m_top, m_right, m_bottom = self.get_current_monitor_workarea()
-
-        # Update anchor center from current coordinates
         self.anchor_center_x = self.curr_x + (self.curr_w / 2.0)
 
         self.target_w = float(tw)
         self.target_h = float(th)
         self.target_r = float(tr)
 
-        # Expand symmetrically around the anchor center, strictly bounded to current monitor
         self.target_x = max(float(m_left + 10), min(float(m_right - tw - 10), self.anchor_center_x - (tw / 2.0)))
         self.target_y = max(float(m_top + 10), min(float(m_bottom - th - 10), self.curr_y))
 
-        # Render new view content for target size immediately so there is zero delay
+        # Render layout structure instantly on click
         self.render(w=int(tw), h=int(th), radius=int(tr))
         self.is_animating = True
         self.is_dirty = False
         self.save_config()
+
+    def toggle_theme(self):
+        self.theme_mode = 'liquid_glass' if self.theme_mode == 'pitch_black' else 'pitch_black'
+        self.card_photos.clear()
+        self.save_config()
+        self.render()
 
     def on_mouse_enter(self, event):
         self.is_hovered = True
@@ -310,7 +338,6 @@ class DynamicIslandHUD:
             nh = VIEW_SPECS['min'][1] + 4.0
             self.target_w = nw
             self.target_h = nh
-            # Symmetrical expansion around anchor center without drifting
             self.target_x = max(float(m_left + 10), min(float(m_right - nw - 10), self.anchor_center_x - (nw / 2.0)))
             self.is_animating = True
         self.is_dirty = True
@@ -328,13 +355,11 @@ class DynamicIslandHUD:
         self.is_dirty = True
 
     def on_press(self, event):
-        # Ground starting coordinates in true Win32 physical window rect
         rect = win32gui.GetWindowRect(self.hwnd)
         self.curr_x = float(rect[0])
         self.curr_y = float(rect[1])
         self.anchor_center_x = self.curr_x + (self.curr_w / 2.0)
 
-        # Use win32api cursor pos to avoid any virtual desktop mapping discrepancies
         cur_pos = win32api.GetCursorPos()
         self._drag_start_x = cur_pos[0]
         self._drag_start_y = cur_pos[1]
@@ -359,7 +384,6 @@ class DynamicIslandHUD:
 
     def on_release(self, event):
         if self._was_dragged:
-            # Sync true window position after drag
             rect = win32gui.GetWindowRect(self.hwnd)
             self.curr_x = float(rect[0])
             self.curr_y = float(rect[1])
@@ -397,7 +421,13 @@ class DynamicIslandHUD:
             max_id = row[0] if row and row[0] else 0
             if max_id > self.last_max_id:
                 if self.last_max_id != 0:
+                    # 1. Trigger Specular Rim Glow & Green Dot
                     self.last_activity_time = time.time()
+                    # 2. Trigger Flying Delta Badge
+                    latest_call = cur.execute('SELECT promptTokens, completionTokens FROM usageHistory WHERE id = ?', (max_id,)).fetchone()
+                    if latest_call:
+                        self.last_delta_tokens = (latest_call[0] or 0) + (latest_call[1] or 0)
+                        self.last_delta_time = time.time()
                 self.last_max_id = max_id
 
             today_str = datetime.date.today().isoformat()
@@ -471,7 +501,6 @@ class DynamicIslandHUD:
         dt = min(0.02, max(0.003, now - self.last_tick_time))
         self.last_tick_time = now
 
-        # User's preferred harmonic spring tuning:
         stiffness = 169.0
         damping = 26.0
 
@@ -506,12 +535,24 @@ class DynamicIslandHUD:
                 self.vel_w = self.vel_h = self.vel_r = self.vel_x = self.vel_y = 0.0
                 self.is_animating = False
 
-            # Animate in-place without rebuilding canvas items
             self.canvas.config(width=int(self.curr_w), height=int(self.curr_h))
             self.update_morph_layout(int(self.curr_w), int(self.curr_h), int(self.curr_r))
-
-            # Reposition smoothly with native Win32 SetWindowPos
             user32.SetWindowPos(self.hwnd, 0, int(self.curr_x), int(self.curr_y), int(self.curr_w), int(self.curr_h), SWP_NOZORDER | SWP_NOACTIVATE)
+
+        # Pulse Phase & Specular Rim Glow Phase
+        self.pulse_frame_idx = (self.pulse_frame_idx + 1) % 32
+        self.rim_glow_phase = (self.rim_glow_phase + 0.12) % (2 * math.pi)
+        self.update_antialiased_dot()
+
+        # Update Specular Rim Glow during active API call
+        time_since_call = time.time() - self.last_activity_time
+        if time_since_call < 2.5:
+            self.update_morph_layout(int(self.curr_w), int(self.curr_h), int(self.curr_r))
+
+        # Check Flying Delta Badge expiration (1.8s duration)
+        if self.last_delta_time != 0 and (time.time() - self.last_delta_time) > 1.8:
+            self.last_delta_time = 0
+            self.is_dirty = True
 
         if not self.is_animating and self.is_dirty:
             self.render()
@@ -519,12 +560,42 @@ class DynamicIslandHUD:
 
         self.root.after(6, self.tick_loop)
 
+    def draw_capsule_image(self, w, h, radius):
+        theme = THEMES[self.theme_mode]
+        im = Image.new('RGBA', (w, h), (1, 1, 1, 0))
+        draw = ImageDraw.Draw(im)
+
+        # 1. Base Fill
+        draw.rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, fill=theme['bg_rgba'])
+
+        # 2. Liquid Glass Top Specular Sheen
+        if theme.get('sheen', False):
+            sheen_h = max(6, h // 3)
+            sheen_img = Image.new('RGBA', (w, sheen_h), (1, 1, 1, 0))
+            s_draw = ImageDraw.Draw(sheen_img)
+            for i in range(sheen_h):
+                alpha = int(24 * (1.0 - (i / sheen_h)))
+                s_draw.line([(radius, i), (w - radius, i)], fill=(255, 255, 255, alpha), width=1)
+            im.paste(sheen_img, (0, 1), sheen_img)
+
+        # 3. Base Perimeter Border
+        border_col = theme['border_hover'] if self.is_hovered else theme['border_rgba']
+        draw.rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, outline=border_col, width=1)
+
+        # 4. Indicator 2: Specular Perimeter Rim Glow (Siri/AirDrop beam)
+        time_since_call = time.time() - self.last_activity_time
+        if time_since_call < 2.5:
+            # Fade out from 1.0 to 0.0
+            intensity = max(0.0, 1.0 - (time_since_call / 2.5))
+            pulse_brightness = (math.sin(self.rim_glow_phase * 2.0) + 1.0) / 2.0
+            alpha = int(220 * intensity * (0.6 + pulse_brightness * 0.4))
+            rim_col = (*theme['rim_glow_rgb'], alpha)
+            draw.rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, outline=rim_col, width=2)
+
+        return im
+
     def update_morph_layout(self, w, h, radius):
-        # 1. Update background capsule image smoothly in-place
-        border_col = PIL_BORDER_HOVER if self.is_hovered else PIL_BORDER
-        img = Image.new('RGBA', (w, h), (1, 1, 1, 0))
-        draw = ImageDraw.Draw(img)
-        draw.rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, fill=PIL_ISLAND_BG, outline=border_col, width=1)
+        img = self.draw_capsule_image(w, h, radius)
         self.bg_photo = ImageTk.PhotoImage(img)
 
         if not self.canvas.find_withtag('bg'):
@@ -532,7 +603,6 @@ class DynamicIslandHUD:
         else:
             self.canvas.itemconfig('bg', image=self.bg_photo)
 
-        # 2. Update existing text & dot coordinates directly with zero object re-creation
         cy = h // 2
         if self.current_view == 'min':
             if self.canvas.find_withtag('min_right'):
@@ -546,8 +616,6 @@ class DynamicIslandHUD:
                 self.canvas.coords('norm_right', w - 22, 64)
             if self.canvas.find_withtag('norm_expand'):
                 self.canvas.coords('norm_expand', w - 22, 104)
-            if self.canvas.find_withtag('norm_tabs'):
-                self.canvas.coords('norm_tabs', w - 22, 24)
 
     def render(self, w=None, h=None, radius=None):
         if w is None:
@@ -559,11 +627,7 @@ class DynamicIslandHUD:
 
         self.hit_zones.clear()
 
-        # Update or create the rounded capsule background WITHOUT wiping it
-        border_col = PIL_BORDER_HOVER if self.is_hovered else PIL_BORDER
-        img = Image.new('RGBA', (w, h), (1, 1, 1, 0))
-        draw = ImageDraw.Draw(img)
-        draw.rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, fill=PIL_ISLAND_BG, outline=border_col, width=1)
+        img = self.draw_capsule_image(w, h, radius)
         self.bg_photo = ImageTk.PhotoImage(img)
 
         if not self.canvas.find_withtag('bg'):
@@ -571,7 +635,6 @@ class DynamicIslandHUD:
         else:
             self.canvas.itemconfig('bg', image=self.bg_photo)
 
-        # Clear only foreground items, leaving the smooth background capsule in place
         for item in self.canvas.find_all():
             if 'bg' not in self.canvas.gettags(item):
                 self.canvas.delete(item)
@@ -583,7 +646,6 @@ class DynamicIslandHUD:
         else:
             self.render_detailed(w, h)
 
-        # Ensure background capsule always stays underneath content
         self.canvas.tag_lower('bg')
 
     def place_dot(self, cx, cy):
@@ -617,21 +679,29 @@ class DynamicIslandHUD:
             tags='min_left'
         )
 
-        tot_tok = self.stats['prompt'] + self.stats['completion']
-        tok_str = format_num(tot_tok)
-        cost_str = f"${self.stats['cost']:.2f}"
-        right_text = f"{tok_str} tok • {cost_str}"
+        # Indicator 4: Flying Delta Badge (`+24.5k tok`)
+        is_flying_delta = (self.last_delta_time != 0) and ((time.time() - self.last_delta_time) < 1.8)
+        if is_flying_delta:
+            right_text = f"+{format_num(self.last_delta_tokens)} tok ⚡"
+            text_color = HEX_GREEN
+        else:
+            tot_tok = self.stats['prompt'] + self.stats['completion']
+            tok_str = format_num(tot_tok)
+            cost_str = f"${self.stats['cost']:.2f}"
+            right_text = f"{tok_str} tok • {cost_str}"
+            text_color = HEX_TEXT_PRIMARY
 
         self.canvas.create_text(
             w - 24, cy, anchor='e',
             text=right_text,
-            fill=HEX_TEXT_PRIMARY,
+            fill=text_color,
             font=(FONT_NAME, 9, 'bold'),
             tags='min_right'
         )
 
     # --- VIEW: NORMAL ---
     def render_normal(self, w, h):
+        theme = THEMES[self.theme_mode]
         self.place_dot(22, 24)
 
         raw_m = self.stats['latest_model']
@@ -655,10 +725,19 @@ class DynamicIslandHUD:
             font=(FONT_NAME, 16, 'bold')
         )
 
+        # Flying delta badge on right side if recent
+        is_flying_delta = (self.last_delta_time != 0) and ((time.time() - self.last_delta_time) < 1.8)
+        if is_flying_delta:
+            norm_right_text = f"+{format_num(self.last_delta_tokens)} tok ⚡"
+            norm_color = HEX_GREEN
+        else:
+            norm_right_text = f"${cost:.2f}  |  {format_num(reqs)} reqs"
+            norm_color = theme['accent_blue']
+
         self.canvas.create_text(
             w - 22, 64, anchor='e',
-            text=f"${cost:.2f}  |  {format_num(reqs)} reqs",
-            fill=HEX_BLUE,
+            text=norm_right_text,
+            fill=norm_color,
             font=(FONT_NAME, 12, 'bold'),
             tags='norm_right'
         )
@@ -689,16 +768,19 @@ class DynamicIslandHUD:
 
     # --- VIEW: DETAILED ---
     def render_detailed(self, w, h):
+        theme = THEMES[self.theme_mode]
         self.place_dot(24, 26)
 
         self.canvas.create_text(
             44, 26, anchor='w',
-            text='Token Details & Usage Stats',
+            text='Dynamic Island • 9router Token HUD',
             fill=HEX_TEXT_PRIMARY,
             font=(FONT_NAME, 11, 'bold')
         )
 
-        # Circular Minimize and Shutdown buttons
+        # Header Action Buttons: Theme Toggle (Glass/Pitch), Minimize, Shutdown
+        theme_lbl = '💧 Glass' if self.theme_mode == 'pitch_black' else '⚫ Pitch'
+        self.draw_pill_button(w - 142, 15, w - 82, 37, theme_lbl, self.toggle_theme)
         self.draw_circle_button(w - 62, 26, r=12, text='—', callback=lambda: self.set_view('min'))
         self.draw_circle_button(w - 32, 26, r=12, text='✕', callback=self.shutdown, bg='#301214', fg='#FF453A', border='#5A1E22')
 
@@ -716,9 +798,9 @@ class DynamicIslandHUD:
 
         card_img = Image.new('RGBA', (box_w, box_h), (1, 1, 1, 0))
         cdraw = ImageDraw.Draw(card_img)
-        cdraw.rounded_rectangle([0, 0, box_w - 1, box_h - 1], radius=16, fill=(21, 21, 23, 255), outline=(44, 44, 46, 255), width=1)
+        cdraw.rounded_rectangle([0, 0, box_w - 1, box_h - 1], radius=16, fill=theme['card_bg_rgba'], outline=theme['card_border_rgba'], width=1)
         self.card_photos['stat_card'] = ImageTk.PhotoImage(card_img)
-        self.canvas.create_image(box_x1, box_y1, anchor='nw', image=self.card_photos['stat_card'], tags='content')
+        self.canvas.create_image(box_x1, box_y1, anchor='nw', image=self.card_photos['stat_card'])
 
         col_w = box_w // 4
         self.canvas.create_text(box_x1 + 16, box_y1 + 22, anchor='w', text='TOTAL TOKENS', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
@@ -728,7 +810,7 @@ class DynamicIslandHUD:
         self.canvas.create_text(box_x1 + col_w + 16, box_y1 + 48, anchor='w', text=f"${cost:.2f}", fill=HEX_GREEN, font=(FONT_NAME, 14, 'bold'))
 
         self.canvas.create_text(box_x1 + col_w * 2 + 16, box_y1 + 22, anchor='w', text='REQUESTS', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
-        self.canvas.create_text(box_x1 + col_w * 2 + 16, box_y1 + 48, anchor='w', text=format_num(reqs), fill=HEX_BLUE, font=(FONT_NAME, 14, 'bold'))
+        self.canvas.create_text(box_x1 + col_w * 2 + 16, box_y1 + 48, anchor='w', text=format_num(reqs), fill=theme['accent_blue'], font=(FONT_NAME, 14, 'bold'))
 
         self.canvas.create_text(box_x1 + col_w * 3 + 16, box_y1 + 22, anchor='w', text='CACHE RATIO', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
         self.canvas.create_text(box_x1 + col_w * 3 + 16, box_y1 + 48, anchor='w', text=f"{cache_pct:.1f}%", fill=HEX_ORANGE, font=(FONT_NAME, 14, 'bold'))
@@ -748,7 +830,7 @@ class DynamicIslandHUD:
 
             bar_w_max = w - 48
             self.canvas.create_rectangle(24, bar_y + 9, 24 + bar_w_max, bar_y + 14, fill='#1C1C1E', outline='')
-            self.canvas.create_rectangle(24, bar_y + 9, 24 + int(bar_w_max * ratio), bar_y + 14, fill=HEX_BLUE, outline='')
+            self.canvas.create_rectangle(24, bar_y + 9, 24 + int(bar_w_max * ratio), bar_y + 14, fill=theme['accent_blue'], outline='')
             bar_y += 30
 
         feed_header_y = bar_y + 10
@@ -769,6 +851,7 @@ class DynamicIslandHUD:
             feed_y += 26
 
     def render_timeline_tabs(self, x, y, anchor='e'):
+        theme = THEMES[self.theme_mode]
         tabs = [('today', 'Today'), ('7d', '7D'), ('30d', '30D'), ('all', 'All')]
         tab_w = 52
         tab_h = 24
@@ -783,16 +866,16 @@ class DynamicIslandHUD:
             by2 = by1 + tab_h
 
             is_active = (self.timeline == key)
-            tab_img_key = f"tab_{key}_{is_active}"
+            tab_img_key = f"tab_{self.theme_mode}_{key}_{is_active}"
             if tab_img_key not in self.card_photos:
                 t_img = Image.new('RGBA', (tab_w, tab_h), (1, 1, 1, 0))
                 tdraw = ImageDraw.Draw(t_img)
-                bg_c = (44, 44, 46, 255) if is_active else (22, 22, 24, 255)
+                bg_c = theme['tab_active_rgba'] if is_active else theme['tab_inactive_rgba']
                 bd_c = (70, 70, 74, 255) if is_active else (38, 38, 40, 255)
                 tdraw.rounded_rectangle([0, 0, tab_w - 1, tab_h - 1], radius=12, fill=bg_c, outline=bd_c, width=1)
                 self.card_photos[tab_img_key] = ImageTk.PhotoImage(t_img)
 
-            self.canvas.create_image(bx1, by1, anchor='nw', image=self.card_photos[tab_img_key], tags='content')
+            self.canvas.create_image(bx1, by1, anchor='nw', image=self.card_photos[tab_img_key])
             fg = HEX_TEXT_PRIMARY if is_active else HEX_TEXT_SECONDARY
             self.canvas.create_text((bx1 + bx2) // 2, (by1 + by2) // 2, text=label, fill=fg, font=(FONT_NAME, 8, 'bold'))
 
@@ -800,6 +883,11 @@ class DynamicIslandHUD:
                 return lambda: self.switch_timeline(k)
 
             self.hit_zones.append((bx1, by1, bx2, by2, make_handler(key)))
+
+    def draw_pill_button(self, x1, y1, x2, y2, text, callback):
+        self.canvas.create_rectangle(x1, y1, x2, y2, fill='#1C1C1E', outline=HEX_BORDER, width=1)
+        self.canvas.create_text((x1 + x2) // 2, (y1 + y2) // 2, text=text, fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 8, 'bold'))
+        self.hit_zones.append((x1, y1, x2, y2, callback))
 
     def draw_circle_button(self, cx, cy, r, text, callback, bg='#1C1C1E', fg=HEX_TEXT_PRIMARY, border=HEX_BORDER):
         self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, fill=bg, outline=border, width=1)
