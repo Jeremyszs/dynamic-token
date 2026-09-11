@@ -34,6 +34,22 @@ Window {
             easing.overshoot: 1.06
         }
     }
+    Behavior on x {
+        id: xAnim
+        enabled: !window.isDragging
+        NumberAnimation {
+            duration: 200
+            easing.type: Easing.OutQuad
+        }
+    }
+    Behavior on y {
+        id: yAnim
+        enabled: !window.isDragging
+        NumberAnimation {
+            duration: 200
+            easing.type: Easing.OutQuad
+        }
+    }
 
     // Dragging state
     property point dragStartPoint: Qt.point(0, 0)
@@ -177,16 +193,16 @@ Window {
                         window.isDragging = false;
                         window.wasDragged = false;
 
-                        // Check magnetic screen-top docking
-                        var screenTop = window.screen.virtualY;
-                        var distToTop = Math.abs(window.y - screenTop);
-                        if (distToTop <= 16) {
-                            window.y = screenTop;
-                            controller.setDockedNotch(true);
-                        } else {
-                            controller.setDockedNotch(false);
+                        // Calculate clamped screen position and smooth glide back
+                        var res = controller.clampGeometry(window.x, window.y, window.width, window.height);
+                        var targetX = res[0];
+                        var targetY = res[1];
+                        var isDocked = res[2];
+
+                        if (window.x !== targetX || window.y !== targetY) {
+                            window.x = targetX;
+                            window.y = targetY;
                         }
-                        controller.updateWindowPosition(window.x, window.y);
                     } else {
                         // Click on background cycles views
                         controller.cycleView();

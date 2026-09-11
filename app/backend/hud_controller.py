@@ -8,6 +8,7 @@ from .data_service import DataService
 from .system_integration import check_startup_registration, check_9router_health, run_9router
 from .models import format_num, format_time_ago, format_time_left, clean_model_display_name
 from .scaling_service import ScalingService
+from .window_position_service import WindowPositionService
 
 CONFIG_PATH = os.path.expandvars(r'%LOCALAPPDATA%\hermes\dynamic_island_config.json')
 
@@ -107,6 +108,17 @@ class HUDController(QObject):
                     self._selected_provider_idx = cfg.get('provider_idx', 0)
                     self.data_service.custom_quotas = cfg.get('quotas', {})
                     self._is_docked_notch = cfg.get('docked_notch', False)
+
+                # Validate and clamp loaded position against active screen
+                pw, ph, _ = TKINTER_PHYSICAL_SPECS.get(self._current_view, (320, 42, 21))
+                lw = self.scaling.dp(pw)
+                lh = self.scaling.dp(ph)
+                cx, cy, docked, _ = WindowPositionService.clamp_rect_to_screen(
+                    self._target_x, self._target_y, lw, lh, is_docked_notch=self._is_docked_notch
+                )
+                self._target_x = cx
+                self._target_y = cy
+                self._is_docked_notch = docked
             except Exception:
                 pass
 
@@ -429,9 +441,20 @@ class HUDController(QObject):
         if view_name not in TKINTER_PHYSICAL_SPECS:
             return
         self._current_view = view_name
-        self.viewChanged.emit()
         pw, ph, pr = TKINTER_PHYSICAL_SPECS[view_name]
-        self.requestWindowResize.emit(self.scaling.dp(pw), self.scaling.dp(ph), self.scaling.dp(pr))
+        lw = self.scaling.dp(pw)
+        lh = self.scaling.dp(ph)
+        # Re-check screen bounds on view transition so larger views never bleed off screen
+        cx, cy, docked, _ = WindowPositionService.clamp_rect_to_screen(
+            self._target_x, self._target_y, lw, lh, is_docked_notch=self._is_docked_notch
+        )
+        self._target_x = cx
+        self._target_y = cy
+        if docked != self._is_docked_notch:
+            self._is_docked_notch = docked
+            self.dockedNotchChanged.emit()
+        self.viewChanged.emit()
+        self.requestWindowResize.emit(lw, lh, self.scaling.dp(pr))
         self.save_config()
 
     @Slot()
@@ -499,6 +522,24 @@ class HUDController(QObject):
         self.refresh_stats()
         self.selectedProviderChanged.emit()
         self.selectedAccountChanged.emit()
+
+    @Slot(int, int, int, int, result=list)
+    def clampGeometry(self, x, y, w, h):
+        """
+        Public Slot called from QML after drag release or view change.
+        Calculates minimal correction against active screen availableGeometry.
+        Returns [clamped_x, clamped_y, is_docked]
+        """
+        cx, cy, docked, scr = WindowPositionService.clamp_rect_to_screen(
+            x, y, w, h, is_docked_notch=self._is_docked_notch
+        )
+        if docked != self._is_docked_notch:
+            self._is_docked_notch = docked
+            self.dockedNotchChanged.emit()
+        self._target_x = cx
+        self._target_y = cy
+        self.save_config()
+        return [cx, cy, docked]
 
     @Slot(int, int)
     def updateWindowPosition(self, x, y):
