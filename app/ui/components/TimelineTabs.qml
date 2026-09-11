@@ -4,7 +4,10 @@ Row {
     id: root
     property string currentTimeline: "today"
     signal timelineSelected(string key)
-    spacing: 3
+    spacing: controller ? controller.scaler.dp(4) : 4
+
+    function dp(px) { return controller ? controller.scaler.dp(px) : px; }
+    function sp(px) { return controller ? controller.scaler.sp(px) : px; }
 
     readonly property var tabs: [
         { "key": "today", "label": "Today" },
@@ -18,9 +21,9 @@ Row {
         Rectangle {
             id: tabBtn
             required property var modelData
-            width: tabText.implicitWidth + 14
-            height: 20
-            radius: 5
+            width: tabText.implicitWidth + root.dp(14)
+            height: root.dp(20)
+            radius: root.dp(6)
             color: root.currentTimeline === modelData.key ? "#2a2a2a" : "#111111"
             border.color: root.currentTimeline === modelData.key ? "#404040" : "#1a1a1a"
             border.width: 1
@@ -35,7 +38,7 @@ Row {
                 text: tabBtn.modelData.label
                 color: root.currentTimeline === tabBtn.modelData.key ? "#ffffff" : "#666666"
                 font.family: "SF Pro Display"
-                font.pixelSize: 11
+                font.pixelSize: root.sp(10)
                 font.bold: true
             }
 

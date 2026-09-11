@@ -13,6 +13,13 @@ Window {
     x: controller.targetX
     y: controller.targetY
 
+    onScreenChanged: {
+        controller.updateScreenDpr(window.screen);
+    }
+    Component.onCompleted: {
+        controller.updateScreenDpr(window.screen);
+    }
+
     Behavior on width {
         NumberAnimation {
             duration: 380

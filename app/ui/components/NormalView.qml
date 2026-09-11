@@ -5,34 +5,37 @@ Item {
     id: root
     anchors.fill: parent
 
-    // Top row: Status dot at x=14, y=10
+    function dp(px) { return controller.scaler.dp(px); }
+    function sp(px) { return controller.scaler.sp(px); }
+
+    // Top row: Status dot at x = dp(22), cy = dp(24)
     StatusDot {
         id: statusDot
-        x: 14
-        y: 12
+        x: root.dp(22) - (width / 2)
+        y: root.dp(24) - (height / 2)
         active: controller.isActivityActive
         error: controller.isActivityError
     }
 
-    // Model name at x=34, font size 14 bold white
+    // Model name at x = dp(40), cy = dp(24), font=(FONT_NAME, 10, 'bold')
     Text {
         id: modelTitle
-        x: 34
+        x: root.dp(40)
         anchors.verticalCenter: statusDot.verticalCenter
         text: controller.latestModel
         color: "#ffffff"
         font.family: "SF Pro Display"
-        font.pixelSize: 14
+        font.pixelSize: root.sp(13)
         font.bold: true
         elide: Text.ElideRight
-        width: timelineTabs.x - 34 - 12
+        width: timelineTabs.x - root.dp(40) - root.dp(12)
     }
 
-    // Timeline Tabs at top right
+    // Timeline Tabs at top right (rightMargin = dp(22))
     TimelineTabs {
         id: timelineTabs
         anchors.right: parent.right
-        anchors.rightMargin: 14
+        anchors.rightMargin: root.dp(22)
         anchors.verticalCenter: statusDot.verticalCenter
         currentTimeline: controller.timeline
         onTimelineSelected: function(key) {
@@ -40,57 +43,54 @@ Item {
         }
     }
 
-    // Middle row (pady=4): Primary Metrics
-    // "92.3M Tokens" on left at x=14, y=44 (font size 22 bold)
+    // Middle row: "92.3M Tokens" at x = dp(22), cy = dp(64), font=(FONT_NAME, 16, 'bold')
     Text {
         id: bigTokens
-        x: 14
-        y: 44
+        x: root.dp(22)
+        y: root.dp(64) - (implicitHeight / 2)
         text: controller.totalTokensStr + " Tokens"
         color: "#ffffff"
         font.family: "SF Pro Display"
-        font.pixelSize: 22
+        font.pixelSize: root.sp(21)
         font.bold: true
     }
 
-    // "$23.03 | 457 reqs" on right at x=w-14, y=48 (font size 16 bold)
+    // "$23.03 | 457 reqs" at x = w - dp(22), cy = dp(64), font=(FONT_NAME, 12, 'bold')
     Text {
         id: costAndReqs
         anchors.right: parent.right
-        anchors.rightMargin: 14
+        anchors.rightMargin: root.dp(22)
         anchors.baseline: bigTokens.baseline
         color: controller.flyingDeltaText !== "" ? "#30D158" : "#ffffff"
         font.family: "SF Pro Display"
-        font.pixelSize: 16
+        font.pixelSize: root.sp(16)
         font.bold: true
         text: controller.flyingDeltaText !== "" ? controller.flyingDeltaText : (controller.costStr + " | " + controller.requestsStr + " reqs")
     }
 
-    // Bottom row: Secondary telemetry
-    // "Last: 1m ago • gemini-3.8-flash-high • +390.4k tok • 22.9s • 183 tok/s" (font size 11, #808080)
+    // Bottom row: "Last: 1m ago • ..." at x = dp(22), cy = dp(104), font=(FONT_NAME, 9)
     Text {
         id: tickerLabel
-        x: 14
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: 10
+        x: root.dp(22)
+        y: root.dp(104) - (implicitHeight / 2)
         anchors.right: expandHint.left
-        anchors.rightMargin: 12
+        anchors.rightMargin: root.dp(12)
         text: controller.tickerText
         color: "#808080"
         font.family: "SF Pro Display"
-        font.pixelSize: 11
+        font.pixelSize: root.sp(11)
         elide: Text.ElideRight
     }
 
-    // "Full" on right at x=w-14
+    // "Full" at x = w - dp(22), cy = dp(104), font=(FONT_NAME, 9, 'bold')
     Text {
         id: expandHint
         anchors.right: parent.right
-        anchors.rightMargin: 14
+        anchors.rightMargin: root.dp(22)
         anchors.verticalCenter: tickerLabel.verticalCenter
         text: "Full"
         color: "#808080"
         font.family: "SF Pro Display"
-        font.pixelSize: 11
+        font.pixelSize: root.sp(11)
     }
 }

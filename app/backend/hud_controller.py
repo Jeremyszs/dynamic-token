@@ -3,15 +3,18 @@ import json
 import time
 import datetime
 from PySide6.QtCore import QObject, Signal, Property, Slot, QTimer
+from PySide6.QtGui import QGuiApplication
 from .data_service import DataService
 from .system_integration import check_startup_registration, check_9router_health, run_9router
 from .models import format_num, format_time_ago, format_time_left, clean_model_display_name
+from .scaling_service import ScalingService
 
 CONFIG_PATH = os.path.expandvars(r'%LOCALAPPDATA%\hermes\dynamic_island_config.json')
 
-VIEW_SPECS = {
-    'min': (290, 36, 18),
-    'normal': (486, 108, 16),
+# EXACT LEGACY TKINTER PHYSICAL DIMENSIONS (Source of Truth)
+TKINTER_PHYSICAL_SPECS = {
+    'min': (320, 42, 21),
+    'normal': (520, 136, 26),
     'detailed': (660, 540, 28)
 }
 
@@ -31,6 +34,7 @@ class HUDController(QObject):
 
     def __init__(self):
         super().__init__()
+        self.scaling = ScalingService(self)
         self.data_service = DataService(on_data_updated=self._on_background_data_ready)
         
         self._current_view = 'min'
@@ -42,7 +46,6 @@ class HUDController(QObject):
         self._is_9router_running = False
         self._is_split_active = False
 
-        self._target_w, self._target_h, self._target_r = VIEW_SPECS[self._current_view]
         self._target_x = 450
         self._target_y = 40
 
@@ -64,6 +67,31 @@ class HUDController(QObject):
         self.check_health()
         self.refresh_stats()
 
+    @Slot(QObject)
+    def updateScreenDpr(self, screen_obj):
+        if screen_obj:
+            self.scaling.update_dpr(screen_obj)
+            self.viewChanged.emit()
+
+    @Property(QObject, constant=True)
+    def scaler(self):
+        return self.scaling
+
+    @Property(int, notify=viewChanged)
+    def targetWidth(self):
+        pw, _, _ = TKINTER_PHYSICAL_SPECS[self._current_view]
+        return self.scaling.dp(pw)
+
+    @Property(int, notify=viewChanged)
+    def targetHeight(self):
+        _, ph, _ = TKINTER_PHYSICAL_SPECS[self._current_view]
+        return self.scaling.dp(ph)
+
+    @Property(int, notify=viewChanged)
+    def targetRadius(self):
+        _, _, pr = TKINTER_PHYSICAL_SPECS[self._current_view]
+        return self.scaling.dp(pr)
+
     def load_config(self):
         if os.path.exists(CONFIG_PATH):
             try:
@@ -76,8 +104,6 @@ class HUDController(QObject):
                     self._selected_provider_idx = cfg.get('provider_idx', 0)
                     self.data_service.custom_quotas = cfg.get('quotas', {})
                     self._is_docked_notch = cfg.get('docked_notch', False)
-                    if self._current_view in VIEW_SPECS:
-                        self._target_w, self._target_h, self._target_r = VIEW_SPECS[self._current_view]
             except Exception:
                 pass
 
@@ -154,18 +180,6 @@ class HUDController(QObject):
         if self._is_hovered != val:
             self._is_hovered = val
             self.hoveredChanged.emit()
-
-    @Property(int, notify=viewChanged)
-    def targetWidth(self):
-        return self._target_w
-
-    @Property(int, notify=viewChanged)
-    def targetHeight(self):
-        return self._target_h
-
-    @Property(int, notify=viewChanged)
-    def targetRadius(self):
-        return self._target_r
 
     @Property(int, notify=viewChanged)
     def targetX(self):
@@ -394,15 +408,12 @@ class HUDController(QObject):
     # Slots / Actions
     @Slot(str)
     def setView(self, view_name):
-        if view_name not in VIEW_SPECS:
+        if view_name not in TKINTER_PHYSICAL_SPECS:
             return
         self._current_view = view_name
-        tw, th, tr = VIEW_SPECS[view_name]
-        self._target_w = tw
-        self._target_h = th
-        self._target_r = tr
         self.viewChanged.emit()
-        self.requestWindowResize.emit(tw, th, tr)
+        pw, ph, pr = TKINTER_PHYSICAL_SPECS[view_name]
+        self.requestWindowResize.emit(self.scaling.dp(pw), self.scaling.dp(ph), self.scaling.dp(pr))
         self.save_config()
 
     @Slot()
