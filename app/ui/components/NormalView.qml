@@ -9,13 +9,13 @@ Item {
     Row {
         id: topRow
         anchors.left: parent.left
-        anchors.leftMargin: 16
+        anchors.leftMargin: 12
         anchors.top: parent.top
-        anchors.topMargin: 12
+        anchors.topMargin: 8
         anchors.right: timelineTabs.left
-        anchors.rightMargin: 10
-        spacing: 6
-        height: 22
+        anchors.rightMargin: 8
+        spacing: 5
+        height: 20
 
         StatusDot {
             anchors.verticalCenter: parent.verticalCenter
@@ -28,17 +28,17 @@ Item {
             text: controller.cleanLatestModel
             color: "#FFFFFF"
             font.family: "SF Pro Display"
-            font.pixelSize: 11
+            font.pixelSize: 10
             font.bold: true
             elide: Text.ElideRight
-            width: parent.width - 26
+            width: parent.width - 24
         }
     }
 
     TimelineTabs {
         id: timelineTabs
         anchors.right: parent.right
-        anchors.rightMargin: 16
+        anchors.rightMargin: 12
         anchors.verticalCenter: topRow.verticalCenter
         currentTimeline: controller.timeline
         onTimelineSelected: function(key) {
@@ -50,24 +50,24 @@ Item {
     Text {
         id: bigTokens
         anchors.left: parent.left
-        anchors.leftMargin: 16
+        anchors.leftMargin: 12
         anchors.top: parent.top
-        anchors.topMargin: 46
+        anchors.topMargin: 29
         text: controller.totalTokensStr + " Tokens"
         color: "#FFFFFF"
         font.family: "SF Pro Display"
-        font.pixelSize: 16
+        font.pixelSize: 14
         font.bold: true
     }
 
     Text {
         id: costAndReqs
         anchors.right: parent.right
-        anchors.rightMargin: 16
+        anchors.rightMargin: 12
         anchors.verticalCenter: bigTokens.verticalCenter
         color: controller.flyingDeltaText !== "" ? "#30D158" : "#FFFFFF"
         font.family: "SF Pro Display"
-        font.pixelSize: 12
+        font.pixelSize: 11
         font.bold: true
         text: controller.flyingDeltaText !== "" ? controller.flyingDeltaText : (controller.costStr + "  |  " + controller.requestsStr + " reqs")
     }
@@ -76,27 +76,27 @@ Item {
     Text {
         id: tickerLabel
         anchors.left: parent.left
-        anchors.leftMargin: 16
+        anchors.leftMargin: 12
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 12
+        anchors.bottomMargin: 6
         anchors.right: expandHint.left
-        anchors.rightMargin: 10
+        anchors.rightMargin: 8
         text: controller.tickerText
         color: "#A1A1A6"
         font.family: "SF Pro Display"
-        font.pixelSize: 10
+        font.pixelSize: 9
         elide: Text.ElideRight
     }
 
     Text {
         id: expandHint
         anchors.right: parent.right
-        anchors.rightMargin: 16
+        anchors.rightMargin: 12
         anchors.verticalCenter: tickerLabel.verticalCenter
         text: "Full"
-        color: "#58585E"
+        color: "#8E8E93"
         font.family: "SF Pro Display"
-        font.pixelSize: 10
+        font.pixelSize: 9
         font.bold: true
     }
 }

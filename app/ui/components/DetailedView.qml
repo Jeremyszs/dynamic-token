@@ -6,15 +6,15 @@ Item {
     id: root
     anchors.fill: parent
 
-    // 1. Header (y=16)
+    // 1. Header (y=12)
     Row {
         id: headerRow
         anchors.left: parent.left
-        anchors.leftMargin: 16
+        anchors.leftMargin: 12
         anchors.top: parent.top
-        anchors.topMargin: 12
+        anchors.topMargin: 10
         spacing: 6
-        height: 22
+        height: 20
 
         StatusDot {
             anchors.verticalCenter: parent.verticalCenter
@@ -36,7 +36,7 @@ Item {
     Row {
         id: headerControls
         anchors.right: parent.right
-        anchors.rightMargin: 16
+        anchors.rightMargin: 12
         anchors.verticalCenter: headerRow.verticalCenter
         spacing: 6
 
@@ -45,7 +45,7 @@ Item {
             normalColor: controller.is9routerRunning ? "#381C08" : "#281506"
             borderColor: controller.is9routerRunning ? "#8A420A" : "#542605"
             iconColor: "#FF9F0A"
-            radiusSize: 11
+            radiusSize: 10
             onClicked: controller.run9routerAction()
         }
 
@@ -54,7 +54,7 @@ Item {
             normalColor: "#1C1C1E"
             borderColor: "#262629"
             iconColor: "#FFFFFF"
-            radiusSize: 11
+            radiusSize: 10
             onClicked: controller.setView("min")
         }
 
@@ -63,7 +63,7 @@ Item {
             normalColor: "#241416"
             borderColor: "#4A1E22"
             iconColor: "#FF453A"
-            radiusSize: 11
+            radiusSize: 10
             onClicked: Qt.quit()
         }
     }
@@ -72,10 +72,10 @@ Item {
     Row {
         id: timelineRow
         anchors.left: parent.left
-        anchors.leftMargin: 16
+        anchors.leftMargin: 12
         anchors.top: headerRow.bottom
-        anchors.topMargin: 8
-        height: 22
+        anchors.topMargin: 6
+        height: 20
 
         TimelineTabs {
             currentTimeline: controller.timeline
@@ -87,7 +87,7 @@ Item {
 
     Text {
         anchors.right: parent.right
-        anchors.rightMargin: 16
+        anchors.rightMargin: 12
         anchors.verticalCenter: timelineRow.verticalCenter
         text: controller.latencySummaryStr
         color: "#A1A1A6"
@@ -101,50 +101,50 @@ Item {
         id: statCard
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.leftMargin: 16
-        anchors.rightMargin: 16
+        anchors.leftMargin: 12
+        anchors.rightMargin: 12
         anchors.top: timelineRow.bottom
-        anchors.topMargin: 8
-        height: 56
-        radius: 12
+        anchors.topMargin: 6
+        height: 48
+        radius: 10
         color: "#121214"
         border.color: "#262629"
         border.width: 1
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 14
-            anchors.rightMargin: 14
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
 
             Column {
                 Layout.fillWidth: true
-                spacing: 2
-                Text { text: "TOTAL TOKENS"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 8; font.bold: true }
-                Text { text: controller.totalTokensStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: 13; font.bold: true }
+                spacing: 1
+                Text { text: "TOTAL TOKENS"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 7; font.bold: true }
+                Text { text: controller.totalTokensStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: 12; font.bold: true }
             }
             Column {
                 Layout.fillWidth: true
-                spacing: 2
-                Text { text: "BURN COST"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 8; font.bold: true }
-                Text { text: controller.costStr; color: "#30D158"; font.family: "SF Pro Display"; font.pixelSize: 13; font.bold: true }
+                spacing: 1
+                Text { text: "BURN COST"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 7; font.bold: true }
+                Text { text: controller.costStr; color: "#30D158"; font.family: "SF Pro Display"; font.pixelSize: 12; font.bold: true }
             }
             Column {
                 Layout.fillWidth: true
-                spacing: 2
-                Text { text: "REQUESTS"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 8; font.bold: true }
-                Text { text: controller.requestsStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: 13; font.bold: true }
+                spacing: 1
+                Text { text: "REQUESTS"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 7; font.bold: true }
+                Text { text: controller.requestsStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: 12; font.bold: true }
             }
             Column {
                 Layout.fillWidth: true
-                spacing: 2
-                Text { text: "CACHE RATIO"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 8; font.bold: true }
-                Text { text: controller.cacheRatioStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: 13; font.bold: true }
+                spacing: 1
+                Text { text: "CACHE RATIO"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 7; font.bold: true }
+                Text { text: controller.cacheRatioStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: 12; font.bold: true }
             }
             Column {
                 Layout.fillWidth: true
-                spacing: 2
-                Text { text: "THINKING"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 8; font.bold: true }
-                Text { text: controller.reasoningTokensStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: 13; font.bold: true }
+                spacing: 1
+                Text { text: "THINKING"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 7; font.bold: true }
+                Text { text: controller.reasoningTokensStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: 12; font.bold: true }
             }
         }
     }
@@ -154,11 +154,11 @@ Item {
         id: accountManagerSection
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.leftMargin: 16
-        anchors.rightMargin: 16
+        anchors.leftMargin: 12
+        anchors.rightMargin: 12
         anchors.top: statCard.bottom
-        anchors.topMargin: 10
-        height: 142
+        anchors.topMargin: 8
+        height: 128
 
         // Section Header Row
         Item {
@@ -166,19 +166,19 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            height: 22
+            height: 20
 
             Row {
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 12
+                spacing: 10
 
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
                     text: "ACCOUNT MANAGER"
                     color: "#58585E"
                     font.family: "SF Pro Display"
-                    font.pixelSize: 9
+                    font.pixelSize: 8
                     font.bold: true
                 }
 
@@ -188,7 +188,7 @@ Item {
                     normalColor: "#1C1C1F"
                     textColor: "#A1A1A6"
                     borderColor: "#333338"
-                    buttonRadius: 7
+                    buttonRadius: 6
                     onClicked: controller.triggerRefresh()
                 }
             }
@@ -205,7 +205,7 @@ Item {
                     textColor: (controller.currentProvider.active_count > 0) ? "#A1A1A6" : "#30D158"
                     normalColor: "#1C1C1F"
                     borderColor: "#333338"
-                    buttonRadius: 7
+                    buttonRadius: 6
                     onClicked: {
                         controller.toggleProviderActive(
                             controller.currentProvider.raw_name,
@@ -214,26 +214,26 @@ Item {
                     }
                 }
 
-        CircleButton {
-            iconType: "left"
-            radiusSize: 10
-            onClicked: controller.prevProvider()
-        }
+                CircleButton {
+                    iconType: "left"
+                    radiusSize: 9
+                    onClicked: controller.prevProvider()
+                }
 
-        Text {
-            anchors.verticalCenter: parent.verticalCenter
-            text: controller.currentProvider.clean_name + " (" + (controller.selectedProviderIndex + 1) + "/" + controller.providersList.length + ")"
-            color: "#FFFFFF"
-            font.family: "SF Pro Display"
-            font.pixelSize: 9
-            font.bold: true
-        }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: controller.currentProvider.clean_name + " (" + (controller.selectedProviderIndex + 1) + "/" + controller.providersList.length + ")"
+                    color: "#FFFFFF"
+                    font.family: "SF Pro Display"
+                    font.pixelSize: 8
+                    font.bold: true
+                }
 
-        CircleButton {
-            iconType: "right"
-            radiusSize: 10
-            onClicked: controller.nextProvider()
-        }
+                CircleButton {
+                    iconType: "right"
+                    radiusSize: 9
+                    onClicked: controller.nextProvider()
+                }
             }
         }
 
@@ -243,9 +243,9 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: amHeader.bottom
-            anchors.topMargin: 6
-            height: 114
-            radius: 12
+            anchors.topMargin: 4
+            height: 104
+            radius: 10
             color: "#121214"
             border.color: "#262629"
             border.width: 1
@@ -253,13 +253,13 @@ Item {
             // Left Column (Email, Quota Bar, Action Button)
             Item {
                 anchors.left: parent.left
-                anchors.leftMargin: 14
+                anchors.leftMargin: 12
                 anchors.top: parent.top
-                anchors.topMargin: 10
+                anchors.topMargin: 8
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: 10
+                anchors.bottomMargin: 8
                 anchors.right: slotSelectorArea.left
-                anchors.rightMargin: 14
+                anchors.rightMargin: 12
 
                 // Line 1: Email & Status Badge
                 Row {
@@ -267,25 +267,25 @@ Item {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
-                    height: 20
+                    height: 18
 
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         text: controller.currentAccount.full_email || "No accounts registered"
                         color: "#FFFFFF"
                         font.family: "SF Pro Display"
-                        font.pixelSize: 11
+                        font.pixelSize: 10
                         font.bold: true
                         elide: Text.ElideRight
-                        width: parent.width - statusPill.width - 10
+                        width: parent.width - statusPill.width - 8
                     }
 
                     Rectangle {
                         id: statusPill
                         anchors.verticalCenter: parent.verticalCenter
-                        width: statusText.implicitWidth + 14
-                        height: 20
-                        radius: 6
+                        width: statusText.implicitWidth + 12
+                        height: 16
+                        radius: 5
                         color: controller.currentAccount.is_current ? "#0B2915" : (controller.currentAccount.is_active ? "#1A1A1D" : "#241416")
                         border.color: controller.currentAccount.is_current ? "#144D26" : (controller.currentAccount.is_active ? "#333336" : "#4A1E22")
                         border.width: 1
@@ -296,7 +296,7 @@ Item {
                             text: "P" + (controller.currentAccount.priority || 1) + " • " + (controller.currentAccount.is_current ? "Active Route" : (controller.currentAccount.is_active ? "Standby Ready" : "Disabled"))
                             color: controller.currentAccount.is_current ? "#30D158" : (controller.currentAccount.is_active ? "#FFFFFF" : "#58585E")
                             font.family: "SF Pro Display"
-                            font.pixelSize: 8
+                            font.pixelSize: 7
                             font.bold: true
                         }
                     }
@@ -308,8 +308,8 @@ Item {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: emailRow.bottom
-                    anchors.topMargin: 5
-                    height: 14
+                    anchors.topMargin: 4
+                    height: 12
 
                     Text {
                         anchors.left: parent.left
@@ -317,7 +317,7 @@ Item {
                         text: controller.currentAccount.reset_time_left ? ("QUOTA  •  " + controller.currentAccount.reset_time_left) : "CURRENT QUOTA"
                         color: "#58585E"
                         font.family: "SF Pro Display"
-                        font.pixelSize: 8
+                        font.pixelSize: 7
                         font.bold: true
                     }
 
@@ -327,7 +327,7 @@ Item {
                         text: (controller.currentAccount.used_str || "0") + " / " + (controller.currentAccount.limit_str || "0") + " (" + (controller.currentAccount.used_pct_str || "0.0%") + ")"
                         color: (controller.currentAccount.used_pct >= 90) ? "#FF453A" : ((controller.currentAccount.used_pct >= 75) ? "#FF9F0A" : "#FFFFFF")
                         font.family: "SF Pro Display"
-                        font.pixelSize: 9
+                        font.pixelSize: 8
                         font.bold: true
                     }
                 }
@@ -338,9 +338,9 @@ Item {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: quotaLabelRow.bottom
-                    anchors.topMargin: 4
-                    height: 6
-                    radius: 3
+                    anchors.topMargin: 3
+                    height: 5
+                    radius: 2.5
                     color: "#202024"
                     border.color: "#28282C"
                     border.width: 1
@@ -350,7 +350,7 @@ Item {
                         anchors.top: parent.top
                         anchors.bottom: parent.bottom
                         width: Math.max(0, Math.min(parent.width, parent.width * ((controller.currentAccount.used_pct || 0) / 100.0)))
-                        radius: 3
+                        radius: 2.5
                         color: (controller.currentAccount.used_pct >= 90) ? "#FF453A" : ((controller.currentAccount.used_pct >= 75) ? "#FF9F0A" : "#30D158")
 
                         Behavior on width {
@@ -364,7 +364,7 @@ Item {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.bottom: parent.bottom
-                    height: 20
+                    height: 18
 
                     PillButton {
                         anchors.left: parent.left
@@ -373,7 +373,7 @@ Item {
                         textColor: controller.currentAccount.is_active ? "#FF6961" : "#30D158"
                         normalColor: controller.currentAccount.is_active ? "#381618" : "#122E1A"
                         borderColor: controller.currentAccount.is_active ? "#662228" : "#1E5E2A"
-                        buttonRadius: 7
+                        buttonRadius: 6
                         onClicked: {
                             if (controller.currentAccount.id) {
                                 controller.toggleAccountActive(controller.currentAccount.id, controller.currentAccount.is_active);
@@ -387,7 +387,7 @@ Item {
                         text: "Provider: " + (controller.currentProvider.active_count || 0) + "/" + (controller.currentProvider.total_count || 0) + " Active"
                         color: "#58585E"
                         font.family: "SF Pro Display"
-                        font.pixelSize: 8
+                        font.pixelSize: 7
                     }
                 }
             }
@@ -396,12 +396,12 @@ Item {
             Item {
                 id: slotSelectorArea
                 anchors.right: parent.right
-                anchors.rightMargin: 14
+                anchors.rightMargin: 12
                 anchors.top: parent.top
-                anchors.topMargin: 10
+                anchors.topMargin: 8
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: 10
-                width: 190
+                anchors.bottomMargin: 8
+                width: 175
 
                 Text {
                     id: slotTitle
@@ -417,8 +417,8 @@ Item {
                 Row {
                     anchors.left: parent.left
                     anchors.top: slotTitle.bottom
-                    anchors.topMargin: 6
-                    spacing: 4
+                    anchors.topMargin: 4
+                    spacing: 3
 
                     Repeater {
                         model: (controller.currentProvider.accounts || []).slice(0, 8)
@@ -426,9 +426,9 @@ Item {
                             id: slotBtn
                             required property var modelData
                             required property int index
-                            width: 20
-                            height: 20
-                            radius: 6
+                            width: 18
+                            height: 18
+                            radius: 5
                             color: {
                                 if (slotBtn.modelData.is_current) return "#1C3A24";
                                 if (slotBtn.modelData.is_active) return "#232326";
@@ -447,7 +447,7 @@ Item {
                                 text: slotBtn.modelData.priority || (slotBtn.index + 1)
                                 color: slotBtn.modelData.is_current ? "#30D158" : (slotBtn.modelData.is_active ? "#FFFFFF" : "#58585E")
                                 font.family: "SF Pro Display"
-                                font.pixelSize: 8
+                                font.pixelSize: 7
                                 font.bold: true
                             }
 
@@ -469,11 +469,11 @@ Item {
         id: modelsSection
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.leftMargin: 16
-        anchors.rightMargin: 16
+        anchors.leftMargin: 12
+        anchors.rightMargin: 12
         anchors.top: accountManagerSection.bottom
-        anchors.topMargin: 8
-        height: 104
+        anchors.topMargin: 6
+        height: 92
 
         Text {
             id: modelsHeader
@@ -482,7 +482,7 @@ Item {
             text: "TOP MODELS BREAKDOWN"
             color: "#58585E"
             font.family: "SF Pro Display"
-            font.pixelSize: 9
+            font.pixelSize: 8
             font.bold: true
         }
 
@@ -490,8 +490,8 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: modelsHeader.bottom
-            anchors.topMargin: 6
-            spacing: 6
+            anchors.topMargin: 4
+            spacing: 5
 
             Repeater {
                 model: controller.topModelsList
@@ -499,13 +499,13 @@ Item {
                     id: modelRowItem
                     required property var modelData
                     width: parent.width
-                    height: 24
+                    height: 22
 
                     Item {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.top: parent.top
-                        height: 14
+                        height: 13
 
                         Text {
                             anchors.left: parent.left
@@ -515,7 +515,7 @@ Item {
                             font.family: "SF Pro Display"
                             font.pixelSize: 9
                             elide: Text.ElideRight
-                            width: parent.width - modelTokensText.implicitWidth - 16
+                            width: parent.width - modelTokensText.implicitWidth - 14
                         }
 
                         Text {
@@ -533,8 +533,8 @@ Item {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.bottom: parent.bottom
-                        height: 6
-                        radius: 3
+                        height: 5
+                        radius: 2.5
                         color: "#202024"
                         border.color: "#28282C"
                         border.width: 1
@@ -544,7 +544,7 @@ Item {
                             anchors.top: parent.top
                             anchors.bottom: parent.bottom
                             width: Math.max(0, Math.min(parent.width, parent.width * modelRowItem.modelData.ratio))
-                            radius: 3
+                            radius: 2.5
                             color: "#E5E5EA"
                         }
                     }
@@ -558,12 +558,12 @@ Item {
         id: historySection
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.leftMargin: 16
-        anchors.rightMargin: 16
+        anchors.leftMargin: 12
+        anchors.rightMargin: 12
         anchors.top: modelsSection.bottom
-        anchors.topMargin: 8
+        anchors.topMargin: 6
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 10
+        anchors.bottomMargin: 8
 
         Text {
             id: historyHeader
@@ -572,7 +572,7 @@ Item {
             text: "LIVE API CALL HISTORY"
             color: "#58585E"
             font.family: "SF Pro Display"
-            font.pixelSize: 9
+            font.pixelSize: 8
             font.bold: true
         }
 
@@ -580,8 +580,8 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: historyHeader.bottom
-            anchors.topMargin: 6
-            spacing: 5
+            anchors.topMargin: 4
+            spacing: 4
 
             Repeater {
                 model: controller.recentCallsList
@@ -589,15 +589,15 @@ Item {
                     id: historyRowItem
                     required property var modelData
                     width: parent.width
-                    height: 18
+                    height: 16
 
                     Rectangle {
                         id: badgePill
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
-                        width: 48
-                        height: 16
-                        radius: 5
+                        width: 44
+                        height: 15
+                        radius: 4
                         color: historyRowItem.modelData.is_ok ? "#0B2915" : "#2D0E11"
                         border.color: historyRowItem.modelData.is_ok ? "#144D26" : "#59181D"
                         border.width: 1
@@ -614,14 +614,14 @@ Item {
 
                     Text {
                         anchors.left: badgePill.right
-                        anchors.leftMargin: 8
+                        anchors.leftMargin: 6
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.right: statsLabel.left
-                        anchors.rightMargin: 8
+                        anchors.rightMargin: 6
                         text: historyRowItem.modelData.model
                         color: "#FFFFFF"
                         font.family: "SF Pro Display"
-                        font.pixelSize: 9
+                        font.pixelSize: 8
                         elide: Text.ElideRight
                     }
 

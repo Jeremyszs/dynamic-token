@@ -9,7 +9,7 @@ Item {
     StatusDot {
         id: statusDot
         anchors.left: parent.left
-        anchors.leftMargin: 12
+        anchors.leftMargin: 10
         anchors.verticalCenter: parent.verticalCenter
         active: controller.isActivityActive
         error: controller.isActivityError
@@ -19,10 +19,10 @@ Item {
     Text {
         id: modelText
         anchors.left: statusDot.right
-        anchors.leftMargin: 8
+        anchors.leftMargin: 6
         anchors.verticalCenter: parent.verticalCenter
         anchors.right: metricsText.left
-        anchors.rightMargin: 12
+        anchors.rightMargin: 8
         text: controller.cleanLatestModel
         color: "#A1A1A6"
         font.family: "SF Pro Display"
@@ -35,7 +35,7 @@ Item {
     Text {
         id: metricsText
         anchors.right: parent.right
-        anchors.rightMargin: 18
+        anchors.rightMargin: 12
         anchors.verticalCenter: parent.verticalCenter
         color: {
             if (controller.flyingDeltaText !== "") return "#30D158";
