@@ -80,10 +80,12 @@ VIEW_SPECS = {
     'detailed': (630, 540, 28)
 }
 
+SWP_NOSIZE = 0x0001
 SWP_NOZORDER = 0x0004
 SWP_NOACTIVATE = 0x0010
 SWP_NOCOPYBITS = 0x0100
 SWP_FLAGS = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS
+SWP_MOVE_FLAGS = SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS
 
 def format_num(n):
     if n is None:
@@ -405,23 +407,31 @@ class DynamicIslandHUD:
         self._orig_win_y = self.curr_y
         self._dragging = False
         self._was_dragged = False
+        self._last_drag_pos = (int(self.curr_x), int(self.curr_y))
 
     def on_drag(self, event):
         cur_pos = win32api.GetCursorPos()
         dx = cur_pos[0] - self._drag_start_x
         dy = cur_pos[1] - self._drag_start_y
-        if abs(dx) > 3 or abs(dy) > 3:
+        if abs(dx) > 2 or abs(dy) > 2:
             self._dragging = True
             self._was_dragged = True
-            self.curr_x = self._orig_win_x + dx
-            self.curr_y = self._orig_win_y + dy
-            self.target_x = self.curr_x
-            self.target_y = self.curr_y
-            self.anchor_center_x = self.curr_x + (self.curr_w / 2.0)
-            user32.SetWindowPos(self.hwnd, 0, int(self.curr_x), int(self.curr_y), int(self.curr_w), int(self.curr_h), SWP_FLAGS)
+            nx = int(self._orig_win_x + dx)
+            ny = int(self._orig_win_y + dy)
+            if getattr(self, '_last_drag_pos', None) != (nx, ny):
+                self._last_drag_pos = (nx, ny)
+                self.curr_x = float(nx)
+                self.curr_y = float(ny)
+                self.target_x = self.curr_x
+                self.target_y = self.curr_y
+                self.anchor_center_x = self.curr_x + (self.curr_w / 2.0)
+                # SWP_MOVE_FLAGS passes SWP_NOSIZE so Windows never touches window sizing/DC buffers during drag
+                user32.SetWindowPos(self.hwnd, 0, nx, ny, 0, 0, SWP_MOVE_FLAGS)
 
     def on_release(self, event):
+        self._dragging = False
         if self._was_dragged:
+            self._was_dragged = False
             rect = win32gui.GetWindowRect(self.hwnd)
             self.curr_x = float(rect[0])
             self.curr_y = float(rect[1])
@@ -789,21 +799,23 @@ class DynamicIslandHUD:
             self.update_morph_layout(int(self.curr_w), int(self.curr_h), int(self.curr_r))
             user32.SetWindowPos(self.hwnd, 0, int(self.curr_x), int(self.curr_y), int(self.curr_w), int(self.curr_h), SWP_FLAGS)
 
-        self.pulse_frame_idx = (self.pulse_frame_idx + 1) % 32
-        self.rim_glow_phase = (self.rim_glow_phase + 0.12) % (2 * math.pi)
-        self.update_antialiased_dot()
+        # Suspend full card/view re-rendering and pulse redraws while actively dragging
+        if not self._dragging:
+            self.pulse_frame_idx = (self.pulse_frame_idx + 1) % 32
+            self.rim_glow_phase = (self.rim_glow_phase + 0.12) % (2 * math.pi)
+            self.update_antialiased_dot()
 
-        time_since_call = time.time() - self.last_activity_time
-        if time_since_call < 2.5:
-            self.update_morph_layout(int(self.curr_w), int(self.curr_h), int(self.curr_r))
+            time_since_call = time.time() - self.last_activity_time
+            if time_since_call < 2.5:
+                self.update_morph_layout(int(self.curr_w), int(self.curr_h), int(self.curr_r))
 
-        if self.last_delta_time != 0 and (time.time() - self.last_delta_time) > 1.8:
-            self.last_delta_time = 0
-            self.is_dirty = True
+            if self.last_delta_time != 0 and (time.time() - self.last_delta_time) > 1.8:
+                self.last_delta_time = 0
+                self.is_dirty = True
 
-        if not self.is_animating and self.is_dirty:
-            self.render()
-            self.is_dirty = False
+            if not self.is_animating and self.is_dirty:
+                self.render()
+                self.is_dirty = False
 
         self.root.after(6, self.tick_loop)
 
