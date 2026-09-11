@@ -15,16 +15,16 @@ Window {
 
     Behavior on width {
         NumberAnimation {
-            duration: 220
+            duration: 380
             easing.type: Easing.OutBack
-            easing.overshoot: 1.15
+            easing.overshoot: 1.06
         }
     }
     Behavior on height {
         NumberAnimation {
-            duration: 220
+            duration: 380
             easing.type: Easing.OutBack
-            easing.overshoot: 1.15
+            easing.overshoot: 1.06
         }
     }
 

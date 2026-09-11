@@ -6,15 +6,15 @@ Item {
     id: root
     anchors.fill: parent
 
-    // 1. Header (y=20)
+    // 1. Header (y=16)
     Row {
         id: headerRow
         anchors.left: parent.left
-        anchors.leftMargin: 20
+        anchors.leftMargin: 16
         anchors.top: parent.top
-        anchors.topMargin: 16
-        spacing: 8
-        height: 24
+        anchors.topMargin: 12
+        spacing: 6
+        height: 22
 
         StatusDot {
             anchors.verticalCenter: parent.verticalCenter
@@ -36,16 +36,16 @@ Item {
     Row {
         id: headerControls
         anchors.right: parent.right
-        anchors.rightMargin: 20
+        anchors.rightMargin: 16
         anchors.verticalCenter: headerRow.verticalCenter
-        spacing: 8
+        spacing: 6
 
         CircleButton {
             buttonText: "9R"
             normalColor: controller.is9routerRunning ? "#381C08" : "#281506"
             borderColor: controller.is9routerRunning ? "#8A420A" : "#542605"
             iconColor: "#FF9F0A"
-            radiusSize: 12
+            radiusSize: 11
             onClicked: controller.run9routerAction()
         }
 
@@ -54,7 +54,7 @@ Item {
             normalColor: "#1C1C1E"
             borderColor: "#262629"
             iconColor: "#FFFFFF"
-            radiusSize: 12
+            radiusSize: 11
             onClicked: controller.setView("min")
         }
 
@@ -63,7 +63,7 @@ Item {
             normalColor: "#241416"
             borderColor: "#4A1E22"
             iconColor: "#FF453A"
-            radiusSize: 12
+            radiusSize: 11
             onClicked: Qt.quit()
         }
     }
@@ -72,10 +72,10 @@ Item {
     Row {
         id: timelineRow
         anchors.left: parent.left
-        anchors.leftMargin: 20
+        anchors.leftMargin: 16
         anchors.top: headerRow.bottom
-        anchors.topMargin: 12
-        height: 24
+        anchors.topMargin: 8
+        height: 22
 
         TimelineTabs {
             currentTimeline: controller.timeline
@@ -87,7 +87,7 @@ Item {
 
     Text {
         anchors.right: parent.right
-        anchors.rightMargin: 20
+        anchors.rightMargin: 16
         anchors.verticalCenter: timelineRow.verticalCenter
         text: controller.latencySummaryStr
         color: "#A1A1A6"
@@ -101,48 +101,48 @@ Item {
         id: statCard
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.leftMargin: 20
-        anchors.rightMargin: 20
+        anchors.leftMargin: 16
+        anchors.rightMargin: 16
         anchors.top: timelineRow.bottom
-        anchors.topMargin: 10
-        height: 64
-        radius: 14
+        anchors.topMargin: 8
+        height: 56
+        radius: 12
         color: "#121214"
         border.color: "#262629"
         border.width: 1
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 16
-            anchors.rightMargin: 16
+            anchors.leftMargin: 14
+            anchors.rightMargin: 14
 
             Column {
                 Layout.fillWidth: true
-                spacing: 4
+                spacing: 2
                 Text { text: "TOTAL TOKENS"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 8; font.bold: true }
                 Text { text: controller.totalTokensStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: 13; font.bold: true }
             }
             Column {
                 Layout.fillWidth: true
-                spacing: 4
+                spacing: 2
                 Text { text: "BURN COST"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 8; font.bold: true }
                 Text { text: controller.costStr; color: "#30D158"; font.family: "SF Pro Display"; font.pixelSize: 13; font.bold: true }
             }
             Column {
                 Layout.fillWidth: true
-                spacing: 4
+                spacing: 2
                 Text { text: "REQUESTS"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 8; font.bold: true }
                 Text { text: controller.requestsStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: 13; font.bold: true }
             }
             Column {
                 Layout.fillWidth: true
-                spacing: 4
+                spacing: 2
                 Text { text: "CACHE RATIO"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 8; font.bold: true }
                 Text { text: controller.cacheRatioStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: 13; font.bold: true }
             }
             Column {
                 Layout.fillWidth: true
-                spacing: 4
+                spacing: 2
                 Text { text: "THINKING"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 8; font.bold: true }
                 Text { text: controller.reasoningTokensStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: 13; font.bold: true }
             }
@@ -154,11 +154,11 @@ Item {
         id: accountManagerSection
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.leftMargin: 20
-        anchors.rightMargin: 20
+        anchors.leftMargin: 16
+        anchors.rightMargin: 16
         anchors.top: statCard.bottom
-        anchors.topMargin: 14
-        height: 154
+        anchors.topMargin: 10
+        height: 142
 
         // Section Header Row
         Item {
@@ -166,12 +166,12 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            height: 24
+            height: 22
 
             Row {
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 14
+                spacing: 12
 
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
@@ -188,6 +188,7 @@ Item {
                     normalColor: "#1C1C1F"
                     textColor: "#A1A1A6"
                     borderColor: "#333338"
+                    buttonRadius: 7
                     onClicked: controller.triggerRefresh()
                 }
             }
@@ -196,7 +197,7 @@ Item {
             Row {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 8
+                spacing: 6
 
                 PillButton {
                     anchors.verticalCenter: parent.verticalCenter
@@ -204,6 +205,7 @@ Item {
                     textColor: (controller.currentProvider.active_count > 0) ? "#A1A1A6" : "#30D158"
                     normalColor: "#1C1C1F"
                     borderColor: "#333338"
+                    buttonRadius: 7
                     onClicked: {
                         controller.toggleProviderActive(
                             controller.currentProvider.raw_name,
@@ -243,9 +245,9 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: amHeader.bottom
-            anchors.topMargin: 8
-            height: 122
-            radius: 14
+            anchors.topMargin: 6
+            height: 114
+            radius: 12
             color: "#121214"
             border.color: "#262629"
             border.width: 1
@@ -253,13 +255,13 @@ Item {
             // Left Column (Email, Quota Bar, Action Button)
             Item {
                 anchors.left: parent.left
-                anchors.leftMargin: 16
+                anchors.leftMargin: 14
                 anchors.top: parent.top
-                anchors.topMargin: 12
+                anchors.topMargin: 10
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: 12
+                anchors.bottomMargin: 10
                 anchors.right: slotSelectorArea.left
-                anchors.rightMargin: 16
+                anchors.rightMargin: 14
 
                 // Line 1: Email & Status Badge
                 Row {
@@ -267,7 +269,7 @@ Item {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
-                    height: 22
+                    height: 20
 
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
@@ -283,7 +285,7 @@ Item {
                     Rectangle {
                         id: statusPill
                         anchors.verticalCenter: parent.verticalCenter
-                        width: statusText.implicitWidth + 14
+                        width: statusText.implicitWidth + 12
                         height: 18
                         radius: 6
                         color: controller.currentAccount.is_current ? "#0B2915" : (controller.currentAccount.is_active ? "#1A1A1D" : "#241416")
@@ -308,7 +310,7 @@ Item {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: emailRow.bottom
-                    anchors.topMargin: 6
+                    anchors.topMargin: 5
                     height: 14
 
                     Text {
@@ -364,7 +366,7 @@ Item {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.bottom: parent.bottom
-                    height: 22
+                    height: 20
 
                     PillButton {
                         anchors.left: parent.left
@@ -373,7 +375,7 @@ Item {
                         textColor: controller.currentAccount.is_active ? "#FF6961" : "#30D158"
                         normalColor: controller.currentAccount.is_active ? "#381618" : "#122E1A"
                         borderColor: controller.currentAccount.is_active ? "#662228" : "#1E5E2A"
-                        buttonRadius: 8
+                        buttonRadius: 7
                         onClicked: {
                             if (controller.currentAccount.id) {
                                 controller.toggleAccountActive(controller.currentAccount.id, controller.currentAccount.is_active);
@@ -396,12 +398,12 @@ Item {
             Item {
                 id: slotSelectorArea
                 anchors.right: parent.right
-                anchors.rightMargin: 16
+                anchors.rightMargin: 14
                 anchors.top: parent.top
-                anchors.topMargin: 12
+                anchors.topMargin: 10
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: 12
-                width: 200
+                anchors.bottomMargin: 10
+                width: 190
 
                 Text {
                     id: slotTitle
@@ -417,7 +419,7 @@ Item {
                 Row {
                     anchors.left: parent.left
                     anchors.top: slotTitle.bottom
-                    anchors.topMargin: 8
+                    anchors.topMargin: 6
                     spacing: 4
 
                     Repeater {
@@ -426,8 +428,8 @@ Item {
                             id: slotBtn
                             required property var modelData
                             required property int index
-                            width: 22
-                            height: 22
+                            width: 20
+                            height: 20
                             radius: 6
                             color: {
                                 if (slotBtn.modelData.is_current) return "#1C3A24";
@@ -469,11 +471,11 @@ Item {
         id: modelsSection
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.leftMargin: 20
-        anchors.rightMargin: 20
+        anchors.leftMargin: 16
+        anchors.rightMargin: 16
         anchors.top: accountManagerSection.bottom
-        anchors.topMargin: 10
-        height: 110
+        anchors.topMargin: 8
+        height: 104
 
         Text {
             id: modelsHeader
@@ -490,8 +492,8 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: modelsHeader.bottom
-            anchors.topMargin: 8
-            spacing: 8
+            anchors.topMargin: 6
+            spacing: 6
 
             Repeater {
                 model: controller.topModelsList
@@ -499,13 +501,13 @@ Item {
                     id: modelRowItem
                     required property var modelData
                     width: parent.width
-                    height: 26
+                    height: 24
 
                     Item {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.top: parent.top
-                        height: 16
+                        height: 14
 
                         Text {
                             anchors.left: parent.left
@@ -558,12 +560,12 @@ Item {
         id: historySection
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.leftMargin: 20
-        anchors.rightMargin: 20
+        anchors.leftMargin: 16
+        anchors.rightMargin: 16
         anchors.top: modelsSection.bottom
-        anchors.topMargin: 10
+        anchors.topMargin: 8
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 14
+        anchors.bottomMargin: 10
 
         Text {
             id: historyHeader
@@ -580,8 +582,8 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: historyHeader.bottom
-            anchors.topMargin: 8
-            spacing: 6
+            anchors.topMargin: 6
+            spacing: 5
 
             Repeater {
                 model: controller.recentCallsList
@@ -589,15 +591,15 @@ Item {
                     id: historyRowItem
                     required property var modelData
                     width: parent.width
-                    height: 20
+                    height: 18
 
                     Rectangle {
                         id: badgePill
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
-                        width: 52
-                        height: 18
-                        radius: 6
+                        width: 48
+                        height: 16
+                        radius: 5
                         color: historyRowItem.modelData.is_ok ? "#0B2915" : "#2D0E11"
                         border.color: historyRowItem.modelData.is_ok ? "#144D26" : "#59181D"
                         border.width: 1
@@ -614,10 +616,10 @@ Item {
 
                     Text {
                         anchors.left: badgePill.right
-                        anchors.leftMargin: 10
+                        anchors.leftMargin: 8
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.right: statsLabel.left
-                        anchors.rightMargin: 10
+                        anchors.rightMargin: 8
                         text: historyRowItem.modelData.model
                         color: "#FFFFFF"
                         font.family: "SF Pro Display"
@@ -632,7 +634,7 @@ Item {
                         text: historyRowItem.modelData.stats_str
                         color: "#A1A1A6"
                         font.family: "SF Pro Display"
-                        font.pixelSize: 9
+                        font.pixelSize: 8
                     }
                 }
             }

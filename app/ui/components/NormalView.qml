@@ -6,36 +6,40 @@ Item {
     anchors.fill: parent
 
     // Row 1: Status Dot, Model Name, Timeline Tabs
-    StatusDot {
-        id: statusDot
+    Row {
+        id: topRow
         anchors.left: parent.left
-        anchors.leftMargin: 20
+        anchors.leftMargin: 16
         anchors.top: parent.top
-        anchors.topMargin: 16
-        active: controller.isActivityActive
-        error: controller.isActivityError
-    }
-
-    Text {
-        id: modelTitle
-        anchors.left: statusDot.right
-        anchors.leftMargin: 8
-        anchors.verticalCenter: statusDot.verticalCenter
+        anchors.topMargin: 12
         anchors.right: timelineTabs.left
-        anchors.rightMargin: 12
-        text: controller.cleanLatestModel
-        color: "#FFFFFF"
-        font.family: "SF Pro Display"
-        font.pixelSize: 10
-        font.bold: true
-        elide: Text.ElideRight
+        anchors.rightMargin: 10
+        spacing: 6
+        height: 22
+
+        StatusDot {
+            anchors.verticalCenter: parent.verticalCenter
+            active: controller.isActivityActive
+            error: controller.isActivityError
+        }
+
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text: controller.cleanLatestModel
+            color: "#FFFFFF"
+            font.family: "SF Pro Display"
+            font.pixelSize: 10
+            font.bold: true
+            elide: Text.ElideRight
+            width: parent.width - 26
+        }
     }
 
     TimelineTabs {
         id: timelineTabs
         anchors.right: parent.right
-        anchors.rightMargin: 20
-        anchors.verticalCenter: statusDot.verticalCenter
+        anchors.rightMargin: 16
+        anchors.verticalCenter: topRow.verticalCenter
         currentTimeline: controller.timeline
         onTimelineSelected: function(key) {
             controller.setTimeline(key);
@@ -46,24 +50,24 @@ Item {
     Text {
         id: bigTokens
         anchors.left: parent.left
-        anchors.leftMargin: 20
+        anchors.leftMargin: 16
         anchors.top: parent.top
-        anchors.topMargin: 52
+        anchors.topMargin: 46
         text: controller.totalTokensStr + " Tokens"
         color: "#FFFFFF"
         font.family: "SF Pro Display"
-        font.pixelSize: 16
+        font.pixelSize: 15
         font.bold: true
     }
 
     Text {
         id: costAndReqs
         anchors.right: parent.right
-        anchors.rightMargin: 20
+        anchors.rightMargin: 16
         anchors.verticalCenter: bigTokens.verticalCenter
         color: controller.flyingDeltaText !== "" ? "#30D158" : "#FFFFFF"
         font.family: "SF Pro Display"
-        font.pixelSize: 12
+        font.pixelSize: 11
         font.bold: true
         text: controller.flyingDeltaText !== "" ? controller.flyingDeltaText : (controller.costStr + "  |  " + controller.requestsStr + " reqs")
     }
@@ -72,11 +76,11 @@ Item {
     Text {
         id: tickerLabel
         anchors.left: parent.left
-        anchors.leftMargin: 20
+        anchors.leftMargin: 16
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 16
+        anchors.bottomMargin: 12
         anchors.right: expandHint.left
-        anchors.rightMargin: 12
+        anchors.rightMargin: 10
         text: controller.tickerText
         color: "#A1A1A6"
         font.family: "SF Pro Display"
@@ -87,7 +91,7 @@ Item {
     Text {
         id: expandHint
         anchors.right: parent.right
-        anchors.rightMargin: 20
+        anchors.rightMargin: 16
         anchors.verticalCenter: tickerLabel.verticalCenter
         text: "Full"
         color: "#58585E"
