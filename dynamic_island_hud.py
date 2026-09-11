@@ -509,6 +509,17 @@ class DynamicIslandHUD:
             by_model = {}
             today_acc_stats = {}
 
+            # Current Quota is strictly based on today's current usage, independent of timeline selection
+            curr_quota_acc_tokens = {}
+            t_row = cur.execute('SELECT data FROM usageDaily WHERE dateKey = ?', (today_str,)).fetchone()
+            if t_row:
+                try:
+                    td = json.loads(t_row[0])
+                    for acc_id, a_stat in td.get('byAccount', {}).items():
+                        curr_quota_acc_tokens[acc_id] = (a_stat.get('promptTokens', 0) or 0) + (a_stat.get('completionTokens', 0) or 0)
+                except Exception:
+                    pass
+
             for r in rows:
                 try:
                     d = json.loads(r[1])
@@ -528,9 +539,11 @@ class DynamicIslandHUD:
                         by_model[clean]['cost'] += mstat.get('cost', 0.0)
                     for acc_id, a_stat in d.get('byAccount', {}).items():
                         if acc_id not in today_acc_stats:
-                            today_acc_stats[acc_id] = {'requests': 0, 'promptTokens': 0}
+                            today_acc_stats[acc_id] = {'requests': 0, 'promptTokens': 0, 'completionTokens': 0, 'cost': 0.0}
                         today_acc_stats[acc_id]['requests'] += a_stat.get('requests', 0)
                         today_acc_stats[acc_id]['promptTokens'] += a_stat.get('promptTokens', 0)
+                        today_acc_stats[acc_id]['completionTokens'] += a_stat.get('completionTokens', 0)
+                        today_acc_stats[acc_id]['cost'] += a_stat.get('cost', 0.0)
                 except Exception:
                     pass
 
@@ -574,7 +587,10 @@ class DynamicIslandHUD:
                 short_user = full_email.split('@')[0]
                 astats = today_acc_stats.get(r[0], {})
                 a_reqs = astats.get('requests', 0)
-                a_toks = astats.get('promptTokens', 0)
+                a_toks = astats.get('promptTokens', 0) + astats.get('completionTokens', 0)
+                a_cost = astats.get('cost', 0.0)
+                # Current day quota tokens (strictly today, independent of timeline)
+                a_curr_quota_toks = curr_quota_acc_tokens.get(r[0], 0)
                 is_curr = (latest_conn_id and r[0] == latest_conn_id)
 
                 providers_map[raw_prov].append({
@@ -586,7 +602,9 @@ class DynamicIslandHUD:
                     'is_active': is_active,
                     'is_current': is_curr,
                     'reqs': a_reqs,
-                    'toks': a_toks
+                    'toks': a_toks,
+                    'cost': a_cost,
+                    'quota_toks': a_curr_quota_toks
                 })
 
             providers_data = []
@@ -993,22 +1011,14 @@ class DynamicIslandHUD:
                                     callback=lambda: self.toggle_provider_active(curr_prov.get('raw_name'), any_active_in_prov),
                                     fill='#1C1C1F', fg=HEX_TEXT_SECONDARY if any_active_in_prov else HEX_GREEN, radius=8)
 
-        # Account Manager Card Container (Height tuned to 124px)
-        pool_box_y = pool_header_y + 16
-        pool_box_h = 124
+        # Account Manager Card Container (Height tuned to 120px)
+        pool_box_y = pool_header_y + 14
+        pool_box_h = 120
 
         self.draw_rounded_card('pool_card', box_x1, pool_box_y, box_w, pool_box_h, radius=16)
 
         accs = curr_prov.get('accounts', [])
         prov_raw = curr_prov.get('raw_name', '')
-
-        # Provider-level Quota Limit calculations:
-        prov_acc_limits = [self.get_account_quota_limit(prov_raw, a.get('full_email') or a.get('name')) for a in accs]
-        prov_total_limit = sum(prov_acc_limits) if prov_acc_limits else self.get_account_quota_limit(prov_raw, 'default')
-        num_accs = max(1, len(accs))
-        prov_avg_limit = prov_total_limit / num_accs
-        prov_avg_used = curr_prov.get('total_toks', 0) / num_accs
-        prov_avg_pct = min(100.0, (prov_avg_used / prov_avg_limit * 100.0)) if prov_avg_limit > 0 else 0.0
 
         current_active_idx = 0
         for i, a in enumerate(accs):
@@ -1026,7 +1036,7 @@ class DynamicIslandHUD:
         # Right Column: Interactive Account Slot Selector (Clickable 1..N) with rounded pills
         chain_w = 210
         chain_x_start = box_x1 + box_w - chain_w
-        self.canvas.create_text(chain_x_start, pool_box_y + 18, anchor='w', text='SELECT ACCOUNT', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 7, 'bold'))
+        self.canvas.create_text(chain_x_start, pool_box_y + 16, anchor='w', text='SELECT ACCOUNT', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 7, 'bold'))
 
         slot_x = chain_x_start
         for i, acc in enumerate(accs[:8]):
@@ -1051,8 +1061,8 @@ class DynamicIslandHUD:
             if is_selected:
                 btn_border = '#FFFFFF'
 
-            bx1, by1 = slot_x, pool_box_y + 32
-            bx2, by2 = slot_x + 22, pool_box_y + 54
+            bx1, by1 = slot_x, pool_box_y + 30
+            bx2, by2 = slot_x + 22, pool_box_y + 52
 
             self.draw_pill_button_styled(bx1, by1, bx2, by2, str(p_num),
                                         callback=lambda idx=i, pr=prov_raw: self.select_account_slot(pr, idx),
@@ -1067,69 +1077,80 @@ class DynamicIslandHUD:
             status_text = "Active Route" if is_curr else ("Standby Ready" if is_on else "Disabled")
             status_color = HEX_GREEN if is_curr else (HEX_TEXT_PRIMARY if is_on else HEX_TEXT_MUTED)
 
-            # Account Quota Limit Calculations
-            acc_used_toks = displayed_acc.get('toks', 0)
+            # CURRENT QUOTA: Strictly current day usage, NOT multiplied/filtered by timeline
+            acc_quota_used = displayed_acc.get('quota_toks', 0)
             acc_limit = self.get_account_quota_limit(prov_raw, acc_name)
-            acc_ratio = min(1.0, acc_used_toks / (acc_limit if acc_limit > 0 else 1))
-            acc_pct = (acc_used_toks / acc_limit * 100.0) if acc_limit > 0 else 0.0
+            acc_ratio = min(1.0, acc_quota_used / (acc_limit if acc_limit > 0 else 1))
+            acc_pct = (acc_quota_used / acc_limit * 100.0) if acc_limit > 0 else 0.0
 
-            # Line 1 (y=pool_box_y + 18): Account Name & Status Pill
+            # TIMELINE SYNCHRONIZED TOKENS: Synchronized with timeline selection (today, 7D, 30D, All)
+            timeline_toks = displayed_acc.get('toks', 0)
+            timeline_reqs = displayed_acc.get('reqs', 0)
+            t_label = 'Today' if self.timeline == 'today' else ('7D' if self.timeline == '7d' else ('30D' if self.timeline == '30d' else 'All-Time'))
+
+            # Available horizontal width for the left side before hitting the account pills:
+            max_left_w = chain_x_start - (box_x1 + 16) - 14  # ~346px
+
+            # Line 1 (y=pool_box_y + 16): Responsive Account Name & Status
+            # Email is anchored LEFT, and Status Badge is anchored RIGHT at max_left_w!
+            # Since max_left_w is 346px, and email is ~125px while status is ~95px, they sit at opposite ends with ~125px of empty space in between and CAN NEVER OVERLAP!
+            status_badge = f"P{displayed_acc.get('priority', 1)}  •  {status_text}"
+            disp_email = acc_name
+            if len(disp_email) > 22:
+                disp_email = disp_email[:20] + '..'
+
+            # 1. Email text (Anchor 'w' on left)
             self.canvas.create_text(
-                box_x1 + 16, pool_box_y + 18, anchor='w',
-                text=acc_name,
+                box_x1 + 16, pool_box_y + 16, anchor='w',
+                text=disp_email,
                 fill=HEX_TEXT_PRIMARY,
                 font=(FONT_NAME, 10, 'bold')
             )
+            # 2. Status badge (Anchor 'e' on right of left column)
             self.canvas.create_text(
-                box_x1 + 16 + min(220, len(acc_name) * 7 + 10), pool_box_y + 18, anchor='w',
-                text=f"•  P{displayed_acc.get('priority', 1)}  •  {status_text}",
+                box_x1 + 16 + max_left_w, pool_box_y + 16, anchor='e',
+                text=status_badge,
                 fill=status_color,
-                font=(FONT_NAME, 8)
-            )
-
-            # Line 2 (y=pool_box_y + 44): Account Quota Tracker Bar + Figures
-            self.canvas.create_text(
-                box_x1 + 16, pool_box_y + 44, anchor='w',
-                text="Account Quota",
-                fill=HEX_TEXT_MUTED,
-                font=(FONT_NAME, 8)
-            )
-            bar_w_acc = 110
-            bar_x_acc = box_x1 + 96
-            self.canvas.create_rectangle(bar_x_acc, pool_box_y + 40, bar_x_acc + bar_w_acc, pool_box_y + 46, fill='#1C1C1E', outline='')
-            acc_bar_color = '#FF453A' if acc_pct >= 90 else ('#FF9F0A' if acc_pct >= 75 else HEX_GREEN)
-            self.canvas.create_rectangle(bar_x_acc, pool_box_y + 40, bar_x_acc + int(bar_w_acc * acc_ratio), pool_box_y + 46, fill=acc_bar_color, outline='')
-
-            quota_acc_str = f"{format_num(acc_used_toks)} / {format_num(acc_limit)} ({acc_pct:.1f}%)"
-            self.canvas.create_text(
-                bar_x_acc + bar_w_acc + 8, pool_box_y + 44, anchor='w',
-                text=quota_acc_str,
-                fill=HEX_TEXT_PRIMARY,
                 font=(FONT_NAME, 8, 'bold')
             )
 
-            # Line 3 (y=pool_box_y + 68): Provider Level Quota Avg Tracker (Multiple Acc Math)
+            # Line 2 (y=pool_box_y + 38): Current Quota Status (Label on left + Figures on right)
             self.canvas.create_text(
-                box_x1 + 16, pool_box_y + 68, anchor='w',
-                text="Provider Avg",
+                box_x1 + 16, pool_box_y + 38, anchor='w',
+                text="CURRENT QUOTA",
                 fill=HEX_TEXT_MUTED,
-                font=(FONT_NAME, 8)
+                font=(FONT_NAME, 7, 'bold')
             )
-            bar_w_prov = 110
-            bar_x_prov = box_x1 + 96
-            prov_ratio = min(1.0, prov_avg_used / (prov_avg_limit if prov_avg_limit > 0 else 1))
-            self.canvas.create_rectangle(bar_x_prov, pool_box_y + 64, bar_x_prov + bar_w_prov, pool_box_y + 70, fill='#1C1C1E', outline='')
-            self.canvas.create_rectangle(bar_x_prov, pool_box_y + 64, bar_x_prov + int(bar_w_prov * prov_ratio), pool_box_y + 70, fill='#8E8E93', outline='')
-
-            prov_avg_str = f"avg {format_num(prov_avg_used)} / {format_num(prov_avg_limit)} ({prov_avg_pct:.1f}% across {curr_prov.get('active_count')}/{curr_prov.get('total_count')} accs)"
+            quota_acc_str = f"{format_num(acc_quota_used)} / {format_num(acc_limit)} ({acc_pct:.1f}%)"
+            quota_val_color = '#FF453A' if acc_pct >= 90 else ('#FF9F0A' if acc_pct >= 75 else HEX_TEXT_PRIMARY)
             self.canvas.create_text(
-                bar_x_prov + bar_w_prov + 8, pool_box_y + 68, anchor='w',
-                text=prov_avg_str,
+                box_x1 + 16 + max_left_w, pool_box_y + 38, anchor='e',
+                text=quota_acc_str,
+                fill=quota_val_color,
+                font=(FONT_NAME, 8, 'bold')
+            )
+
+            # Line 3 (y=pool_box_y + 51): DEDICATED PROGRESS BAR (Zero overlap with any text!)
+            bar_x1 = box_x1 + 16
+            bar_x2 = bar_x1 + max_left_w
+            bar_y1 = pool_box_y + 49
+            bar_y2 = pool_box_y + 54
+            self.canvas.create_rectangle(bar_x1, bar_y1, bar_x2, bar_y2, fill='#1C1C1E', outline='')
+            acc_bar_color = '#FF453A' if acc_pct >= 90 else ('#FF9F0A' if acc_pct >= 75 else HEX_GREEN)
+            fill_w = int(max_left_w * acc_ratio)
+            if fill_w > 0:
+                self.canvas.create_rectangle(bar_x1, bar_y1, bar_x1 + fill_w, bar_y2, fill=acc_bar_color, outline='')
+
+            # Line 4 (y=pool_box_y + 70): Individual Account Token Used (Synchronized with timeline)
+            used_str = f"{t_label} Burn: {format_num(timeline_toks)} tokens • {timeline_reqs} requests"
+            self.canvas.create_text(
+                box_x1 + 16, pool_box_y + 70, anchor='w',
+                text=used_str,
                 fill=HEX_TEXT_SECONDARY,
                 font=(FONT_NAME, 8)
             )
 
-            # Line 4 (y=pool_box_y + 96): Account Level Action Button with Clean Border Radius (radius=9)
+            # Line 5 (y=pool_box_y + 94): Action Button & Provider Total summary
             acc_action_txt = "Deactivate Account" if is_on else "Activate Account"
             acc_btn_color = '#381618' if is_on else '#122E1A'
             acc_btn_border = '#662228' if is_on else '#1E5E2A'
@@ -1138,7 +1159,7 @@ class DynamicIslandHUD:
             ab_w = 124
             ab_h = 20
             ab_x1 = box_x1 + 16
-            ab_y1 = pool_box_y + 92
+            ab_y1 = pool_box_y + 90
             ab_x2 = ab_x1 + ab_w
             ab_y2 = ab_y1 + ab_h
 
@@ -1149,7 +1170,7 @@ class DynamicIslandHUD:
             # Details footnote on the right of the button
             self.canvas.create_text(
                 ab_x2 + 14, (ab_y1 + ab_y2) // 2, anchor='w',
-                text=f"Total Burn: {format_num(curr_prov['total_toks'])} tok • {curr_prov['total_reqs']} requests",
+                text=f"Provider: {curr_prov['active_count']}/{curr_prov['total_count']} Active • {format_num(curr_prov['total_toks'])} tok",
                 fill=HEX_TEXT_MUTED,
                 font=(FONT_NAME, 8)
             )
@@ -1161,13 +1182,14 @@ class DynamicIslandHUD:
                 font=(FONT_NAME, 9)
             )
 
-        # 4. TOP MODELS BREAKDOWN (Bold section title, 8px gap above bar)
-        models_header_y = pool_box_y + pool_box_h + 14
+        # 4. TOP MODELS BREAKDOWN (Bold section title, generous breathing room under title)
+        models_header_y = pool_box_y + pool_box_h + 16
         self.canvas.create_text(24, models_header_y, anchor='w', text='TOP MODELS BREAKDOWN', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
 
         sorted_models = sorted(self.stats['models'].items(), key=lambda item: item[1]['prompt'], reverse=True)[:3]
 
-        bar_y = models_header_y + 15
+        # Generous vertical separation under title to match Live History spacing
+        bar_y = models_header_y + 28
         for m_name, mdata in sorted_models:
             p_val = mdata['prompt'] + mdata['completion']
             r_val = mdata['requests']
@@ -1178,15 +1200,15 @@ class DynamicIslandHUD:
 
             bar_w_max = w - 48
             # 8px vertical gap between model label baseline and track bar
-            self.canvas.create_rectangle(24, bar_y + 12, 24 + bar_w_max, bar_y + 16, fill='#1C1C1E', outline='')
-            self.canvas.create_rectangle(24, bar_y + 12, 24 + int(bar_w_max * ratio), bar_y + 16, fill='#E5E5EA', outline='')
+            self.canvas.create_rectangle(24, bar_y + 13, 24 + bar_w_max, bar_y + 17, fill='#1C1C1E', outline='')
+            self.canvas.create_rectangle(24, bar_y + 13, 24 + int(bar_w_max * ratio), bar_y + 17, fill='#E5E5EA', outline='')
             bar_y += 26
 
-        # 5. LIVE API CALL HISTORY (Bold section title)
+        # 5. LIVE API CALL HISTORY (Bold section title, matching padding under title)
         feed_header_y = bar_y + 8
         self.canvas.create_text(24, feed_header_y, anchor='w', text='LIVE API CALL HISTORY', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
 
-        feed_y = feed_header_y + 16
+        feed_y = feed_header_y + 22
         for row in self.stats['recent'][:3]:
             t_ago = format_time_ago(row[1])
             m_tag = row[3]
