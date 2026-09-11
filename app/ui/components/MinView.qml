@@ -27,10 +27,10 @@ Item {
         font.pointSize: 9
         font.bold: true
         elide: Text.ElideRight
-        width: controller.isSplitActive ? (parent.width - root.dp(44)) : Math.max(0, metricsText.x - root.dp(36) - root.dp(12))
+        width: Math.max(0, metricsText.x - root.dp(36) - root.dp(8))
     }
 
-    // Right-hand Metrics / Hover Peek / Flying delta: rightMargin = dp(24)
+    // Right-hand Metrics / Hover Peek / Flying delta: rightMargin = dp(16)
     Text {
         id: metricsText
         anchors.right: parent.right
@@ -39,13 +39,13 @@ Item {
         clip: true
         color: {
             if (controller.flyingDeltaText !== "") return "#30D158";
-            if (controller.isHovered || controller.latestTps > 0) return "#f59e0b";
+            if (controller.isHovered) return "#f59e0b";
             return "#FFFFFF";
         }
         font.family: "SF Pro Display"
         font.pointSize: 9
         font.bold: true
-        visible: !controller.isSplitActive
+        visible: true
         text: {
             if (controller.flyingDeltaText !== "") {
                 return controller.flyingDeltaText;

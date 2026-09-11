@@ -84,6 +84,9 @@ class HUDController(QObject):
         # Stretch min view when hovered with cursor (320px -> 350px physical)
         if self._current_view == 'min' and self._is_hovered:
             pw = 350
+        # When split island bubble is ejected, expand window so both main capsule and split bubble fit with all metrics visible
+        if self._current_view == 'min' and self._is_split_active:
+            pw += 70
         return self.scaling.dp(pw)
 
     @Property(int, notify=viewChanged)
