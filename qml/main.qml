@@ -1,7 +1,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
-import QtGraphicalEffects 1.15
 
 Item {
     id: root
@@ -25,12 +24,12 @@ Item {
     // Apple Dynamic Island Capsule Container
     Rectangle {
         id: island
-        width: targetW
-        height: targetH
+        anchors.fill: parent
         radius: targetR
         color: "#000000"
         border.color: mouseArea.containsMouse ? "#555558" : "#2C2C2E"
         border.width: 1
+        clip: true
 
         // Hardware-Accelerated 165Hz GPU Animation via Qt Quick Scene Graph
         Behavior on width {
