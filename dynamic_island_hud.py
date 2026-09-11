@@ -7,6 +7,7 @@ import sqlite3
 import datetime
 import threading
 import ctypes
+from ctypes import wintypes
 import urllib.request
 import webbrowser
 import subprocess
@@ -71,6 +72,7 @@ PIL_CARD_BORDER = (38, 38, 41, 255)
 PIL_TAB_ACTIVE = (42, 42, 45, 255)
 PIL_TAB_INACTIVE = (18, 18, 20, 255)
 PIL_RIM_GLOW_RGB = (48, 209, 88)
+PIL_RIM_GLOW_ERROR_RGB = (255, 69, 58)
 RASTER_SCALE = 2
 
 # Fixed / Static Window Dimensions (No scrolling, perfectly fits all cards)
@@ -141,6 +143,7 @@ class DynamicIslandHUD:
         self.selected_account_indices = {}
         self.is_hovered = False
         self.last_activity_time = 0
+        self.last_activity_is_error = False
         self.last_delta_tokens = 0
         self.last_delta_time = 0
 
@@ -239,6 +242,8 @@ class DynamicIslandHUD:
             'latest_conn_id': None
         }
         self.last_max_id = 0
+        self.last_rd_rowid = 0
+        self.latest_tps = None
         self.is_9router_running = False
 
         self.check_startup_registration()
@@ -255,11 +260,14 @@ class DynamicIslandHUD:
         self.pulse_frame_idx = 0
         self.rim_glow_phase = 0.0
         self.last_tick_time = time.perf_counter()
+
+        self.setup_hotkey()
         self.tick_loop()
 
     def init_antialiased_dots(self):
         self.dot_normal_frames = []
         self.dot_active_frames = []
+        self.dot_error_frames = []
         size = 28
         scale = 4
         img_size = size * scale
@@ -269,6 +277,7 @@ class DynamicIslandHUD:
             phase = (i / 32) * 2 * math.pi
             pulse = (math.sin(phase) + 1.0) / 2.0
 
+            # Normal resting green
             im_norm = Image.new('RGBA', (img_size, img_size), (0, 0, 0, 0))
             d_norm = ImageDraw.Draw(im_norm)
             glow_r_norm = (4.5 + 2.0 + pulse * 1.5) * scale
@@ -277,6 +286,7 @@ class DynamicIslandHUD:
             d_norm.ellipse([cx - core_r, cy - core_r, cx + core_r, cy + core_r], fill=(48, 209, 88, 255))
             self.dot_normal_frames.append(ImageTk.PhotoImage(im_norm.resize((size, size), Image.Resampling.LANCZOS)))
 
+            # Active live call green
             im_act = Image.new('RGBA', (img_size, img_size), (0, 0, 0, 0))
             d_act = ImageDraw.Draw(im_act)
             glow_r_act = (4.5 + 3.0 + pulse * 4.0) * scale
@@ -284,6 +294,15 @@ class DynamicIslandHUD:
             d_act.ellipse([cx - (core_r + 1.5 * scale), cy - (core_r + 1.5 * scale), cx + (core_r + 1.5 * scale), cy + (core_r + 1.5 * scale)], fill=(31, 184, 78, 200))
             d_act.ellipse([cx - core_r, cy - core_r, cx + core_r, cy + core_r], fill=(52, 230, 98, 255))
             self.dot_active_frames.append(ImageTk.PhotoImage(im_act.resize((size, size), Image.Resampling.LANCZOS)))
+
+            # Error / 429 Red alert
+            im_err = Image.new('RGBA', (img_size, img_size), (0, 0, 0, 0))
+            d_err = ImageDraw.Draw(im_err)
+            glow_r_err = (4.5 + 3.5 + pulse * 4.5) * scale
+            d_err.ellipse([cx - glow_r_err, cy - glow_r_err, cx + glow_r_err, cy + glow_r_err], fill=(110, 20, 25, int(160 + pulse * 80)))
+            d_err.ellipse([cx - (core_r + 1.5 * scale), cy - (core_r + 1.5 * scale), cx + (core_r + 1.5 * scale), cy + (core_r + 1.5 * scale)], fill=(184, 35, 45, 200))
+            d_err.ellipse([cx - core_r, cy - core_r, cx + core_r, cy + core_r], fill=(255, 69, 58, 255))
+            self.dot_error_frames.append(ImageTk.PhotoImage(im_err.resize((size, size), Image.Resampling.LANCZOS)))
 
     def load_config(self):
         self.pos_x = None
@@ -526,11 +545,42 @@ class DynamicIslandHUD:
             if max_id > self.last_max_id:
                 if self.last_max_id != 0:
                     self.last_activity_time = time.time()
-                    latest_call = cur.execute('SELECT promptTokens, completionTokens FROM usageHistory WHERE id = ?', (max_id,)).fetchone()
+                    self.last_activity_is_error = False
+                    latest_call = cur.execute('SELECT promptTokens, completionTokens, status FROM usageHistory WHERE id = ?', (max_id,)).fetchone()
                     if latest_call:
                         self.last_delta_tokens = (latest_call[0] or 0) + (latest_call[1] or 0)
                         self.last_delta_time = time.time()
+                        if latest_call[2] != 'ok':
+                            self.last_activity_is_error = True
                 self.last_max_id = max_id
+
+            # Detect errors (e.g. 429 quota exhaustion, upstream failure) from requestDetails
+            rd_latest = cur.execute('SELECT rowid, status, data FROM requestDetails ORDER BY rowid DESC LIMIT 1').fetchone()
+            if rd_latest:
+                rd_rowid, rd_status, rd_data_str = rd_latest
+                if rd_rowid > self.last_rd_rowid:
+                    if self.last_rd_rowid != 0:
+                        if rd_status == 'error':
+                            self.last_activity_time = time.time()
+                            self.last_activity_is_error = True
+                            self.is_dirty = True
+                    self.last_rd_rowid = rd_rowid
+
+                # Calculate real-time token speed (tokens per second)
+                try:
+                    rd_obj = json.loads(rd_data_str)
+                    lat_obj = rd_obj.get('latency', {})
+                    tok_obj = rd_obj.get('tokens', {})
+                    c_tok = tok_obj.get('completion_tokens', 0)
+                    tot_ms = lat_obj.get('total', 0)
+                    ttft_ms = lat_obj.get('ttft', 0)
+                    gen_ms = tot_ms - ttft_ms
+                    if c_tok > 0 and gen_ms >= 80:
+                        self.latest_tps = c_tok / (gen_ms / 1000.0)
+                    elif c_tok > 0 and tot_ms >= 100:
+                        self.latest_tps = c_tok / (tot_ms / 1000.0)
+                except Exception:
+                    pass
 
             today_str = datetime.date.today().isoformat()
             if self.timeline == 'today':
@@ -847,13 +897,14 @@ class DynamicIslandHUD:
         # 2. Base Perimeter Border
         draw.rounded_rectangle([0, 0, rw - 1, rh - 1], radius=rr, outline=border_col, width=scale)
 
-        # 3. Specular Perimeter Rim Glow (Siri/AirDrop neon beam)
+        # 3. Specular Perimeter Rim Glow (Siri/AirDrop neon beam, red for error, green for normal)
         time_since_call = time.time() - self.last_activity_time
         if time_since_call < 2.5:
             intensity = max(0.0, 1.0 - (time_since_call / 2.5))
             pulse_brightness = (math.sin(self.rim_glow_phase * 2.0) + 1.0) / 2.0
             alpha = int(220 * intensity * (0.6 + pulse_brightness * 0.4))
-            rim_col = (*PIL_RIM_GLOW_RGB, alpha)
+            glow_rgb = PIL_RIM_GLOW_ERROR_RGB if getattr(self, 'last_activity_is_error', False) else PIL_RIM_GLOW_RGB
+            rim_col = (*glow_rgb, alpha)
             draw.rounded_rectangle([0, 0, rw - 1, rh - 1], radius=rr, outline=rim_col, width=3 * scale)
 
         # Flatten the resized edge onto the asymmetric color-key background.
@@ -947,7 +998,12 @@ class DynamicIslandHUD:
         if not hasattr(self, 'dot_cx'):
             return
         is_active = (time.time() - self.last_activity_time) < 3.0
-        frame_list = self.dot_active_frames if is_active else self.dot_normal_frames
+        if is_active and getattr(self, 'last_activity_is_error', False):
+            frame_list = self.dot_error_frames
+        elif is_active:
+            frame_list = self.dot_active_frames
+        else:
+            frame_list = self.dot_normal_frames
         img = frame_list[self.pulse_frame_idx]
         self.canvas.itemconfig('dot_img', image=img)
 
@@ -1037,7 +1093,8 @@ class DynamicIslandHUD:
                 tot_ms = self.stats['latest_latency'].get('total', 0)
                 if tot_ms > 0:
                     lat_info = f" • {tot_ms / 1000.0:.1f}s"
-            ticker_txt = f"Last: {t_ago} • {last_call[3]} • +{format_num(last_call[4] + last_call[5])} tok{lat_info}"
+            spd_info = f" • {self.latest_tps:.0f} tok/s" if getattr(self, 'latest_tps', None) else ""
+            ticker_txt = f"Last: {t_ago} • {last_call[3]} • +{format_num(last_call[4] + last_call[5])} tok{lat_info}{spd_info}"
         else:
             ticker_txt = "Listening for API calls..."
 
@@ -1094,7 +1151,8 @@ class DynamicIslandHUD:
             elif tot_ms > 0:
                 lat_color = HEX_GREEN
             if tot_ms > 0:
-                lat_txt = f"{tot_ms / 1000.0:.2f}s (TTFT {ttft_ms}ms)"
+                speed_str = f" • {self.latest_tps:.0f} tok/s" if getattr(self, 'latest_tps', None) else ""
+                lat_txt = f"{tot_ms / 1000.0:.2f}s (TTFT {ttft_ms}ms){speed_str}"
 
         self.canvas.create_text(
             w - 24, 54, anchor='e',
@@ -1472,7 +1530,81 @@ class DynamicIslandHUD:
             self.canvas.create_text(cx, cy, text=text, fill=fg, font=(FONT_NAME, 8, 'bold'))
         self.hit_zones.append((cx - r, cy - r, cx + r, cy + r, callback))
 
+    def toggle_view_hotkey(self):
+        # Toggle between min and detailed view
+        if self.current_view == 'min':
+            self.set_view('detailed')
+        else:
+            self.set_view('min')
+
+    def setup_hotkey(self):
+        # Global low-level hook for Win + Alt + D (bypasses Windows Game Bar reservation)
+        WH_KEYBOARD_LL = 13
+        WM_KEYDOWN = 0x0100
+        WM_SYSKEYDOWN = 0x0104
+        VK_D = 0x44
+        VK_LWIN = 0x5B
+        VK_RWIN = 0x5C
+        VK_LMENU = 0xA4
+        VK_RMENU = 0xA5
+
+        HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
+
+        class KBDLLHOOKSTRUCT(ctypes.Structure):
+            _fields_ = [
+                ('vkCode', wintypes.DWORD),
+                ('scanCode', wintypes.DWORD),
+                ('flags', wintypes.DWORD),
+                ('time', wintypes.DWORD),
+                ('dwExtraInfo', ctypes.POINTER(ctypes.c_ulong))
+            ]
+
+        def is_down(vk):
+            return (user32.GetAsyncKeyState(vk) & 0x8000) != 0
+
+        self._hotkey_hook = None
+        self._hotkey_last_trigger = 0.0
+
+        def hook_proc(nCode, wParam, lParam):
+            if nCode == 0 and wParam in (WM_KEYDOWN, WM_SYSKEYDOWN):
+                kb = KBDLLHOOKSTRUCT.from_address(lParam)
+                if kb.vkCode == VK_D:
+                    win_down = is_down(VK_LWIN) or is_down(VK_RWIN)
+                    alt_down = is_down(VK_LMENU) or is_down(VK_RMENU)
+                    if win_down and alt_down:
+                        now = time.time()
+                        if now - self._hotkey_last_trigger > 0.35:
+                            self._hotkey_last_trigger = now
+                            self.root.after(0, self.toggle_view_hotkey)
+                        return 1
+            return user32.CallNextHookEx(None, nCode, wParam, lParam)
+
+        self._c_hook_proc = HOOKPROC(hook_proc)
+
+        def run_hook_pump():
+            self._hotkey_hook = user32.SetWindowsHookExW(WH_KEYBOARD_LL, self._c_hook_proc, None, 0)
+            msg = wintypes.MSG()
+            while getattr(self, '_hotkey_running', True):
+                bRet = user32.GetMessageW(ctypes.byref(msg), 0, 0, 0)
+                if bRet == 0 or bRet == -1:
+                    break
+                user32.TranslateMessage(ctypes.byref(msg))
+                user32.DispatchMessageW(ctypes.byref(msg))
+            if self._hotkey_hook:
+                user32.UnhookWindowsHookEx(self._hotkey_hook)
+                self._hotkey_hook = None
+
+        self._hotkey_running = True
+        self._hotkey_thread = threading.Thread(target=run_hook_pump, daemon=True)
+        self._hotkey_thread.start()
+
     def shutdown(self):
+        self._hotkey_running = False
+        if getattr(self, '_hotkey_hook', None):
+            try:
+                user32.PostQuitMessage(0)
+            except Exception:
+                pass
         self.save_config()
         self.root.destroy()
         sys.exit(0)
