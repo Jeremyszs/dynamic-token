@@ -13,6 +13,15 @@ Window {
     x: controller.targetX
     y: controller.targetY
 
+    Connections {
+        target: controller
+        function onViewChanged() {
+            // Restore and enforce x and y bindings on view change
+            window.x = controller.targetX;
+            window.y = controller.targetY;
+        }
+    }
+
     onScreenChanged: {
         controller.updateScreenDpr(window.screen);
     }
@@ -22,16 +31,14 @@ Window {
 
     Behavior on width {
         NumberAnimation {
-            duration: 380
-            easing.type: Easing.OutBack
-            easing.overshoot: 1.06
+            duration: 250
+            easing.type: Easing.OutQuad
         }
     }
     Behavior on height {
         NumberAnimation {
-            duration: 380
-            easing.type: Easing.OutBack
-            easing.overshoot: 1.06
+            duration: 250
+            easing.type: Easing.OutQuad
         }
     }
     Behavior on x {
