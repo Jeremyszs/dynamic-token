@@ -246,6 +246,7 @@ class DynamicIslandHUD:
         self.latest_tps = None
         self.is_9router_running = False
         self.live_quotas_cache = {}
+        self._fetching_conn_ids = set()
         self._last_live_quota_fetch = 0.0
 
         self.check_startup_registration()
@@ -535,23 +536,32 @@ class DynamicIslandHUD:
             pass
 
     def fetch_live_quota_for_connection(self, conn_id):
+        # Non-blocking: returns immediately from cache, kicks off background worker if stale
         if not self.is_9router_running or not conn_id:
             return None
         now = time.time()
         cached = self.live_quotas_cache.get(conn_id)
-        if cached and (now - cached['time']) < 15.0:
-            return cached['data']
+        is_stale = (not cached) or (now - cached['time']) >= 15.0
+
+        if is_stale and conn_id not in self._fetching_conn_ids:
+            self._fetching_conn_ids.add(conn_id)
+            threading.Thread(target=self._async_fetch_live_quota, args=(conn_id,), daemon=True).start()
+
+        return cached['data'] if cached else None
+
+    def _async_fetch_live_quota(self, conn_id):
         try:
             url = f'http://127.0.0.1:20128/api/usage/{conn_id}'
             req = urllib.request.Request(url, headers={'User-Agent': 'DynamicTokenHUD/1.0'})
-            with urllib.request.urlopen(req, timeout=1.2) as resp:
+            with urllib.request.urlopen(req, timeout=2.0) as resp:
                 if resp.status == 200:
                     data = json.loads(resp.read())
-                    self.live_quotas_cache[conn_id] = {'time': now, 'data': data}
-                    return data
+                    self.live_quotas_cache[conn_id] = {'time': time.time(), 'data': data}
+                    self.is_dirty = True
         except Exception:
             pass
-        return cached['data'] if cached else None
+        finally:
+            self._fetching_conn_ids.discard(conn_id)
 
     def fetch_database_data(self):
         try:
@@ -1588,8 +1598,9 @@ class DynamicIslandHUD:
 
     def trigger_refresh(self):
         self._last_refresh_click = time.time()
-        # Invalidate live quota cache so it immediately queries 9router for the latest reset quota
+        # Invalidate live quota cache so it immediately queries 9router in the background
         self.live_quotas_cache.clear()
+        self._fetching_conn_ids.clear()
         self.fetch_database_data()
         self.check_9router_health()
         self.is_dirty = True
