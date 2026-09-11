@@ -430,7 +430,8 @@ class DynamicIslandHUD:
         cur_pos = win32api.GetCursorPos()
         dx = cur_pos[0] - self._drag_start_x
         dy = cur_pos[1] - self._drag_start_y
-        if abs(dx) > 2 or abs(dy) > 2:
+        # Use 6px drag threshold to distinguish intentional drag from clicking
+        if abs(dx) > 6 or abs(dy) > 6:
             self._dragging = True
             self._was_dragged = True
             nx = int(self._orig_win_x + dx)
@@ -1192,8 +1193,15 @@ class DynamicIslandHUD:
         # 3. DEDICATED SECTION: ACCOUNT MANAGER (y=154, h=124)
         pool_header_y = 154
         self.canvas.create_text(24, pool_header_y, anchor='w', text='ACCOUNT MANAGER', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
-        # Refresh button cleanly separated from ACCOUNT MANAGER title with 16px padding
-        self.draw_circle_button(188, pool_header_y, r=9, text='refresh', callback=self.refresh_data)
+
+        # Dedicated Refresh Pill Button with visible text and click feedback
+        is_recently_refreshed = (time.time() - getattr(self, '_last_refresh_click', 0)) < 1.2
+        ref_text = "✓ Updated" if is_recently_refreshed else "⟳ Refresh"
+        ref_fg = HEX_GREEN if is_recently_refreshed else HEX_TEXT_SECONDARY
+        ref_bg = '#142A1A' if is_recently_refreshed else '#1C1C1F'
+        ref_border = '#1E5E2A' if is_recently_refreshed else '#333338'
+        self.draw_pill_button_styled(172, pool_header_y - 10, 246, pool_header_y + 10, ref_text,
+                                    callback=self.trigger_refresh, fill=ref_bg, fg=ref_fg, border=ref_border, radius=8)
 
         providers = self.stats.get('providers_data', [])
         num_providers = len(providers)
@@ -1535,10 +1543,15 @@ class DynamicIslandHUD:
             self.canvas.create_text(cx, cy, text=text, fill=fg, font=(FONT_NAME, 8, 'bold'))
         self.hit_zones.append((cx - r, cy - r, cx + r, cy + r, callback))
 
-    def refresh_data(self):
+    def trigger_refresh(self):
+        self._last_refresh_click = time.time()
         self.fetch_database_data()
         self.check_9router_health()
         self.is_dirty = True
+        self.render()
+
+    def refresh_data(self):
+        self.trigger_refresh()
 
     def shutdown(self):
         self.save_config()
