@@ -44,42 +44,26 @@ CONFIG_PATH = os.path.expandvars(r'%LOCALAPPDATA%\hermes\dynamic_island_config.j
 
 COLOR_TRANSPARENT = '#010101'
 
-# Color Themes
-THEMES = {
-    'pitch_black': {
-        'name': 'Pitch Black',
-        'bg_rgba': (0, 0, 0, 255),
-        'border_rgba': (44, 44, 46, 255),
-        'border_hover': (88, 88, 92, 255),
-        'card_bg_rgba': (21, 21, 23, 255),
-        'card_border_rgba': (44, 44, 46, 255),
-        'tab_active_rgba': (44, 44, 46, 255),
-        'tab_inactive_rgba': (22, 22, 24, 255),
-        'accent_blue': '#0A84FF',
-        'rim_glow_rgb': (48, 209, 88), # Apple Siri Green
-        'sheen': False
-    },
-    'liquid_glass': {
-        'name': 'Liquid Glass',
-        'bg_rgba': (10, 14, 22, 245), # Deep liquid glass
-        'border_rgba': (56, 189, 248, 90), # Studio blue specular hairline
-        'border_hover': (56, 189, 248, 160),
-        'card_bg_rgba': (16, 23, 38, 230),
-        'card_border_rgba': (56, 189, 248, 60),
-        'tab_active_rgba': (30, 41, 59, 255),
-        'tab_inactive_rgba': (15, 23, 42, 220),
-        'accent_blue': '#38BDF8', # Studio Blue (Litwave)
-        'rim_glow_rgb': (56, 189, 248), # Neon Cyan/Blue beam
-        'sheen': True
-    }
-}
-
+# Colors & Styling (Pure Pitch Black)
+HEX_BG = '#000000'
+HEX_BORDER = '#2C2C2E'
+HEX_BORDER_HOVER = '#545458'
 HEX_TEXT_PRIMARY = '#FFFFFF'
 HEX_TEXT_SECONDARY = '#98989D'
 HEX_TEXT_MUTED = '#636366'
 HEX_GREEN = '#30D158'
+HEX_BLUE = '#0A84FF'
 HEX_ORANGE = '#FF9F0A'
-HEX_BORDER = '#2C2C2E'
+HEX_BADGE_BG = '#151517'
+
+PIL_ISLAND_BG = (0, 0, 0, 255)
+PIL_BORDER = (44, 44, 46, 255)
+PIL_BORDER_HOVER = (88, 88, 92, 255)
+PIL_CARD_BG = (21, 21, 23, 255)
+PIL_CARD_BORDER = (44, 44, 46, 255)
+PIL_TAB_ACTIVE = (44, 44, 46, 255)
+PIL_TAB_INACTIVE = (22, 22, 24, 255)
+PIL_RIM_GLOW_RGB = (48, 209, 88) # Apple Siri Neon Green Glow
 
 VIEW_SPECS = {
     'min': (320, 42, 21),
@@ -133,7 +117,6 @@ class DynamicIslandHUD:
 
         self.current_view = 'min'
         self.timeline = 'today'
-        self.theme_mode = 'pitch_black' # 'pitch_black' or 'liquid_glass'
         self.is_hovered = False
         self.last_activity_time = 0
         self.last_delta_tokens = 0
@@ -268,7 +251,6 @@ class DynamicIslandHUD:
                     self.pos_y = cfg.get('y')
                     self.current_view = cfg.get('view', 'min')
                     self.timeline = cfg.get('timeline', 'today')
-                    self.theme_mode = cfg.get('theme', 'pitch_black')
             except Exception:
                 pass
 
@@ -280,8 +262,7 @@ class DynamicIslandHUD:
                     'x': int(self.curr_x),
                     'y': int(self.curr_y),
                     'view': self.current_view,
-                    'timeline': self.timeline,
-                    'theme': self.theme_mode
+                    'timeline': self.timeline
                 }, f)
         except Exception:
             pass
@@ -323,12 +304,6 @@ class DynamicIslandHUD:
         self.is_animating = True
         self.is_dirty = False
         self.save_config()
-
-    def toggle_theme(self):
-        self.theme_mode = 'liquid_glass' if self.theme_mode == 'pitch_black' else 'pitch_black'
-        self.card_photos.clear()
-        self.save_config()
-        self.render()
 
     def on_mouse_enter(self, event):
         self.is_hovered = True
@@ -561,35 +536,23 @@ class DynamicIslandHUD:
         self.root.after(6, self.tick_loop)
 
     def draw_capsule_image(self, w, h, radius):
-        theme = THEMES[self.theme_mode]
         im = Image.new('RGBA', (w, h), (1, 1, 1, 0))
         draw = ImageDraw.Draw(im)
 
-        # 1. Base Fill
-        draw.rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, fill=theme['bg_rgba'])
+        # 1. Base Pitch Black Fill
+        draw.rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, fill=PIL_ISLAND_BG)
 
-        # 2. Liquid Glass Top Specular Sheen
-        if theme.get('sheen', False):
-            sheen_h = max(6, h // 3)
-            sheen_img = Image.new('RGBA', (w, sheen_h), (1, 1, 1, 0))
-            s_draw = ImageDraw.Draw(sheen_img)
-            for i in range(sheen_h):
-                alpha = int(24 * (1.0 - (i / sheen_h)))
-                s_draw.line([(radius, i), (w - radius, i)], fill=(255, 255, 255, alpha), width=1)
-            im.paste(sheen_img, (0, 1), sheen_img)
-
-        # 3. Base Perimeter Border
-        border_col = theme['border_hover'] if self.is_hovered else theme['border_rgba']
+        # 2. Base Perimeter Border
+        border_col = PIL_BORDER_HOVER if self.is_hovered else PIL_BORDER
         draw.rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, outline=border_col, width=1)
 
-        # 4. Indicator 2: Specular Perimeter Rim Glow (Siri/AirDrop beam)
+        # 3. Indicator 2: Specular Perimeter Rim Glow (Siri/AirDrop neon beam)
         time_since_call = time.time() - self.last_activity_time
         if time_since_call < 2.5:
-            # Fade out from 1.0 to 0.0
             intensity = max(0.0, 1.0 - (time_since_call / 2.5))
             pulse_brightness = (math.sin(self.rim_glow_phase * 2.0) + 1.0) / 2.0
             alpha = int(220 * intensity * (0.6 + pulse_brightness * 0.4))
-            rim_col = (*theme['rim_glow_rgb'], alpha)
+            rim_col = (*PIL_RIM_GLOW_RGB, alpha)
             draw.rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, outline=rim_col, width=2)
 
         return im
@@ -701,7 +664,6 @@ class DynamicIslandHUD:
 
     # --- VIEW: NORMAL ---
     def render_normal(self, w, h):
-        theme = THEMES[self.theme_mode]
         self.place_dot(22, 24)
 
         raw_m = self.stats['latest_model']
@@ -732,7 +694,7 @@ class DynamicIslandHUD:
             norm_color = HEX_GREEN
         else:
             norm_right_text = f"${cost:.2f}  |  {format_num(reqs)} reqs"
-            norm_color = theme['accent_blue']
+            norm_color = HEX_BLUE
 
         self.canvas.create_text(
             w - 22, 64, anchor='e',
@@ -768,7 +730,6 @@ class DynamicIslandHUD:
 
     # --- VIEW: DETAILED ---
     def render_detailed(self, w, h):
-        theme = THEMES[self.theme_mode]
         self.place_dot(24, 26)
 
         self.canvas.create_text(
@@ -778,9 +739,7 @@ class DynamicIslandHUD:
             font=(FONT_NAME, 11, 'bold')
         )
 
-        # Header Action Buttons: Theme Toggle (Glass/Pitch), Minimize, Shutdown
-        theme_lbl = '💧 Glass' if self.theme_mode == 'pitch_black' else '⚫ Pitch'
-        self.draw_pill_button(w - 142, 15, w - 82, 37, theme_lbl, self.toggle_theme)
+        # Header Action Buttons: Minimize and Shutdown
         self.draw_circle_button(w - 62, 26, r=12, text='—', callback=lambda: self.set_view('min'))
         self.draw_circle_button(w - 32, 26, r=12, text='✕', callback=self.shutdown, bg='#301214', fg='#FF453A', border='#5A1E22')
 
@@ -798,7 +757,7 @@ class DynamicIslandHUD:
 
         card_img = Image.new('RGBA', (box_w, box_h), (1, 1, 1, 0))
         cdraw = ImageDraw.Draw(card_img)
-        cdraw.rounded_rectangle([0, 0, box_w - 1, box_h - 1], radius=16, fill=theme['card_bg_rgba'], outline=theme['card_border_rgba'], width=1)
+        cdraw.rounded_rectangle([0, 0, box_w - 1, box_h - 1], radius=16, fill=PIL_CARD_BG, outline=PIL_CARD_BORDER, width=1)
         self.card_photos['stat_card'] = ImageTk.PhotoImage(card_img)
         self.canvas.create_image(box_x1, box_y1, anchor='nw', image=self.card_photos['stat_card'])
 
@@ -810,7 +769,7 @@ class DynamicIslandHUD:
         self.canvas.create_text(box_x1 + col_w + 16, box_y1 + 48, anchor='w', text=f"${cost:.2f}", fill=HEX_GREEN, font=(FONT_NAME, 14, 'bold'))
 
         self.canvas.create_text(box_x1 + col_w * 2 + 16, box_y1 + 22, anchor='w', text='REQUESTS', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
-        self.canvas.create_text(box_x1 + col_w * 2 + 16, box_y1 + 48, anchor='w', text=format_num(reqs), fill=theme['accent_blue'], font=(FONT_NAME, 14, 'bold'))
+        self.canvas.create_text(box_x1 + col_w * 2 + 16, box_y1 + 48, anchor='w', text=format_num(reqs), fill=HEX_BLUE, font=(FONT_NAME, 14, 'bold'))
 
         self.canvas.create_text(box_x1 + col_w * 3 + 16, box_y1 + 22, anchor='w', text='CACHE RATIO', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
         self.canvas.create_text(box_x1 + col_w * 3 + 16, box_y1 + 48, anchor='w', text=f"{cache_pct:.1f}%", fill=HEX_ORANGE, font=(FONT_NAME, 14, 'bold'))
@@ -830,7 +789,7 @@ class DynamicIslandHUD:
 
             bar_w_max = w - 48
             self.canvas.create_rectangle(24, bar_y + 9, 24 + bar_w_max, bar_y + 14, fill='#1C1C1E', outline='')
-            self.canvas.create_rectangle(24, bar_y + 9, 24 + int(bar_w_max * ratio), bar_y + 14, fill=theme['accent_blue'], outline='')
+            self.canvas.create_rectangle(24, bar_y + 9, 24 + int(bar_w_max * ratio), bar_y + 14, fill=HEX_BLUE, outline='')
             bar_y += 30
 
         feed_header_y = bar_y + 10
@@ -851,7 +810,6 @@ class DynamicIslandHUD:
             feed_y += 26
 
     def render_timeline_tabs(self, x, y, anchor='e'):
-        theme = THEMES[self.theme_mode]
         tabs = [('today', 'Today'), ('7d', '7D'), ('30d', '30D'), ('all', 'All')]
         tab_w = 52
         tab_h = 24
@@ -866,11 +824,11 @@ class DynamicIslandHUD:
             by2 = by1 + tab_h
 
             is_active = (self.timeline == key)
-            tab_img_key = f"tab_{self.theme_mode}_{key}_{is_active}"
+            tab_img_key = f"tab_{key}_{is_active}"
             if tab_img_key not in self.card_photos:
                 t_img = Image.new('RGBA', (tab_w, tab_h), (1, 1, 1, 0))
                 tdraw = ImageDraw.Draw(t_img)
-                bg_c = theme['tab_active_rgba'] if is_active else theme['tab_inactive_rgba']
+                bg_c = PIL_TAB_ACTIVE if is_active else PIL_TAB_INACTIVE
                 bd_c = (70, 70, 74, 255) if is_active else (38, 38, 40, 255)
                 tdraw.rounded_rectangle([0, 0, tab_w - 1, tab_h - 1], radius=12, fill=bg_c, outline=bd_c, width=1)
                 self.card_photos[tab_img_key] = ImageTk.PhotoImage(t_img)
