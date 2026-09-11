@@ -118,6 +118,29 @@ def format_time_ago(ts_str):
     except Exception:
         return ts_str[11:19] if len(ts_str) >= 19 else ts_str
 
+def format_time_left(reset_at_str):
+    if not reset_at_str:
+        return None
+    try:
+        cleaned = reset_at_str.replace('Z', '+00:00')
+        dt = datetime.datetime.fromisoformat(cleaned)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        diff_s = int((dt - now).total_seconds())
+        if diff_s <= 0:
+            return 'Resetting...'
+        days = diff_s // 86400
+        hours = (diff_s % 86400) // 3600
+        mins = (diff_s % 3600) // 60
+        if days > 0:
+            return f"{days}d {hours}h"
+        if hours > 0:
+            return f"{hours}h {mins}m"
+        if mins > 0:
+            return f"{mins}m"
+        return f"{diff_s}s"
+    except Exception:
+        return None
+
 def clean_provider_name(p):
     if not p: return '--'
     if p.startswith('openai-compatible-chat'): return 'OpenAI Chat'
@@ -716,6 +739,15 @@ class DynamicIslandHUD:
                 a_curr_quota_toks = curr_quota_acc_tokens.get(r[0], 0)
                 is_curr = (latest_conn_id and r[0] == latest_conn_id)
 
+                # Parse conn data for resetAt/lastPingedResetAt
+                a_reset_at = None
+                if r[6]:
+                    try:
+                        c_data = json.loads(r[6])
+                        a_reset_at = c_data.get('lastPingedResetAt') or c_data.get('resetsAt') or c_data.get('expiresAt')
+                    except Exception:
+                        pass
+
                 providers_map[raw_prov].append({
                     'id': r[0],
                     'provider': raw_prov,
@@ -727,7 +759,8 @@ class DynamicIslandHUD:
                     'reqs': a_reqs,
                     'toks': a_toks,
                     'cost': a_cost,
-                    'quota_toks': a_curr_quota_toks
+                    'quota_toks': a_curr_quota_toks,
+                    'reset_at': a_reset_at
                 })
 
             providers_data = []
@@ -1331,6 +1364,7 @@ class DynamicIslandHUD:
             disp_cid = displayed_acc.get('id')
             live_data = self.fetch_live_quota_for_connection(disp_cid)
             live_quota_used_pct = None
+            live_reset_at = None
             if live_data and 'quotas' in live_data:
                 # Find matching model quota from 9router (e.g. gemini-3.8-flash-high or main quota)
                 q_dict = live_data['quotas']
@@ -1344,6 +1378,18 @@ class DynamicIslandHUD:
                     best_q = next(iter(q_dict.values()))
                 if best_q and 'remainingPercentage' in best_q:
                     live_quota_used_pct = max(0.0, min(100.0, 100.0 - float(best_q['remainingPercentage'])))
+                    live_reset_at = best_q.get('resetAt')
+
+            # Fallback 1: check connection metadata for resetAt/expiresAt
+            if not live_reset_at and displayed_acc.get('reset_at'):
+                live_reset_at = displayed_acc['reset_at']
+
+            # Fallback 2: next UTC midnight (standard daily quota reset boundary)
+            if not live_reset_at:
+                now_utc = datetime.datetime.now(datetime.timezone.utc)
+                live_reset_at = (now_utc + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+            reset_time_left_str = format_time_left(live_reset_at)
 
             acc_limit = self.get_account_quota_limit(prov_raw, acc_name)
             if live_quota_used_pct is not None:
@@ -1389,10 +1435,11 @@ class DynamicIslandHUD:
             self.draw_pill_button_styled(tag_x1, pool_box_y + 6, tag_x2, pool_box_y + 24, status_tag_text,
                                         callback=lambda: None, fill=tag_fill, fg=tag_fg, border=tag_border, radius=6)
 
-            # Line 2 (y=pool_box_y + 38): Current Quota Status (Label on left + Figures on right)
+            # Line 2 (y=pool_box_y + 38): Current Quota Status (Label + Reset countdown on left, Figures on right)
+            quota_label_txt = f"QUOTA  •  {reset_time_left_str}" if reset_time_left_str else "CURRENT QUOTA"
             self.canvas.create_text(
                 box_x1 + 16, pool_box_y + 38, anchor='w',
-                text="CURRENT QUOTA",
+                text=quota_label_txt,
                 fill=HEX_TEXT_MUTED,
                 font=(FONT_NAME, 7, 'bold')
             )
