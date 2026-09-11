@@ -71,7 +71,7 @@ PIL_RIM_GLOW_RGB = (48, 209, 88)
 VIEW_SPECS = {
     'min': (320, 42, 21),
     'normal': (520, 136, 26),
-    'detailed': (630, 530, 28)
+    'detailed': (630, 540, 28)
 }
 
 SWP_NOZORDER = 0x0004
@@ -133,6 +133,17 @@ class DynamicIslandHUD:
         self.last_activity_time = 0
         self.last_delta_tokens = 0
         self.last_delta_time = 0
+
+        # Quota limit definitions (tokens per account per day).
+        # Antigravity/Gemini pro quotas default to 200M/acc; OpenAI/Codex to 100M/acc; other keys to 50M/acc
+        self.default_account_quotas = {
+            'antigravity': 200_000_000,
+            'codex': 150_000_000,
+            'gemini': 200_000_000,
+            'kilocode': 100_000_000,
+            'default': 100_000_000
+        }
+        self.custom_quotas = {}
 
         self.load_config()
 
@@ -268,6 +279,7 @@ class DynamicIslandHUD:
                     self.current_view = cfg.get('view', 'min')
                     self.timeline = cfg.get('timeline', 'today')
                     self.selected_provider_idx = cfg.get('provider_idx', 0)
+                    self.custom_quotas = cfg.get('quotas', {})
             except Exception:
                 pass
 
@@ -280,7 +292,8 @@ class DynamicIslandHUD:
                     'y': int(self.curr_y),
                     'view': self.current_view,
                     'timeline': self.timeline,
-                    'provider_idx': self.selected_provider_idx
+                    'provider_idx': self.selected_provider_idx,
+                    'quotas': self.custom_quotas
                 }, f)
         except Exception:
             pass
@@ -419,6 +432,14 @@ class DynamicIslandHUD:
     def select_account_slot(self, prov_name, slot_idx):
         self.selected_account_indices[prov_name] = slot_idx
         self.is_dirty = True
+
+    def get_account_quota_limit(self, prov_name, acc_id_or_email):
+        # Check custom override first
+        if acc_id_or_email in self.custom_quotas:
+            return self.custom_quotas[acc_id_or_email]
+        if prov_name in self.custom_quotas:
+            return self.custom_quotas[prov_name]
+        return self.default_account_quotas.get(prov_name, self.default_account_quotas['default'])
 
     def toggle_account_active(self, conn_id, current_status):
         if not os.path.exists(DB_PATH) or not conn_id:
@@ -876,22 +897,22 @@ class DynamicIslandHUD:
         box_x1 = 22
         box_w = w - 44
 
-        # 1. Header (y=26)
-        self.place_dot(24, 26)
+        # 1. Header (y=24)
+        self.place_dot(24, 24)
 
         self.canvas.create_text(
-            44, 26, anchor='w',
+            44, 24, anchor='w',
             text='Token Usage & API Call History',
             fill=HEX_TEXT_PRIMARY,
             font=(FONT_NAME, 11, 'bold')
         )
 
         # Header Controls: Minimize and Shutdown
-        self.draw_circle_button(w - 62, 26, r=12, text='—', callback=lambda: self.set_view('min'))
-        self.draw_circle_button(w - 32, 26, r=12, text='X', callback=self.shutdown, bg='#241416', fg='#FF453A', border='#4A1E22')
+        self.draw_circle_button(w - 62, 24, r=12, text='—', callback=lambda: self.set_view('min'))
+        self.draw_circle_button(w - 32, 24, r=12, text='X', callback=self.shutdown, bg='#241416', fg='#FF453A', border='#4A1E22')
 
-        # Row 2 (y=60): Timeline Tabs & Latency Metric
-        self.render_timeline_tabs(24, 60, anchor='w')
+        # Row 2 (y=54): Timeline Tabs & Latency Metric
+        self.render_timeline_tabs(24, 54, anchor='w')
 
         lat_txt = "-- ms"
         lat_color = HEX_TEXT_SECONDARY
@@ -906,13 +927,13 @@ class DynamicIslandHUD:
                 lat_txt = f"{tot_ms / 1000.0:.2f}s (TTFT {ttft_ms}ms)"
 
         self.canvas.create_text(
-            w - 24, 60, anchor='e',
+            w - 24, 54, anchor='e',
             text=lat_txt,
             fill=lat_color,
             font=(FONT_NAME, 8, 'bold')
         )
 
-        # 2. PRIMARY METRICS CARD (y=84, h=70)
+        # 2. PRIMARY METRICS CARD (y=74, h=66)
         tot_tok = self.stats['prompt'] + self.stats['completion']
         prompt_tok = self.stats['prompt']
         cached_tok = self.stats['cached']
@@ -921,29 +942,29 @@ class DynamicIslandHUD:
         reasoning_tok = self.stats['reasoning']
         cache_pct = (cached_tok / prompt_tok * 100) if prompt_tok > 0 else 0.0
 
-        box_y1 = 84
-        box_h = 70
+        box_y1 = 74
+        box_h = 66
 
         self.draw_rounded_card('stat_card', box_x1, box_y1, box_w, box_h, radius=16)
 
         col_w = box_w // 5
-        self.canvas.create_text(box_x1 + 14, box_y1 + 20, anchor='w', text='TOTAL TOKENS', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
-        self.canvas.create_text(box_x1 + 14, box_y1 + 46, anchor='w', text=format_num(tot_tok), fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 13, 'bold'))
+        self.canvas.create_text(box_x1 + 14, box_y1 + 18, anchor='w', text='TOTAL TOKENS', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
+        self.canvas.create_text(box_x1 + 14, box_y1 + 44, anchor='w', text=format_num(tot_tok), fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 13, 'bold'))
 
-        self.canvas.create_text(box_x1 + col_w + 14, box_y1 + 20, anchor='w', text='BURN COST', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
-        self.canvas.create_text(box_x1 + col_w + 14, box_y1 + 46, anchor='w', text=f"${cost:.2f}", fill=HEX_GREEN, font=(FONT_NAME, 13, 'bold'))
+        self.canvas.create_text(box_x1 + col_w + 14, box_y1 + 18, anchor='w', text='BURN COST', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
+        self.canvas.create_text(box_x1 + col_w + 14, box_y1 + 44, anchor='w', text=f"${cost:.2f}", fill=HEX_GREEN, font=(FONT_NAME, 13, 'bold'))
 
-        self.canvas.create_text(box_x1 + col_w * 2 + 14, box_y1 + 20, anchor='w', text='REQUESTS', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
-        self.canvas.create_text(box_x1 + col_w * 2 + 14, box_y1 + 46, anchor='w', text=format_num(reqs), fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 13, 'bold'))
+        self.canvas.create_text(box_x1 + col_w * 2 + 14, box_y1 + 18, anchor='w', text='REQUESTS', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
+        self.canvas.create_text(box_x1 + col_w * 2 + 14, box_y1 + 44, anchor='w', text=format_num(reqs), fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 13, 'bold'))
 
-        self.canvas.create_text(box_x1 + col_w * 3 + 14, box_y1 + 20, anchor='w', text='CACHE RATIO', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
-        self.canvas.create_text(box_x1 + col_w * 3 + 14, box_y1 + 46, anchor='w', text=f"{cache_pct:.1f}%", fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 13, 'bold'))
+        self.canvas.create_text(box_x1 + col_w * 3 + 14, box_y1 + 18, anchor='w', text='CACHE RATIO', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
+        self.canvas.create_text(box_x1 + col_w * 3 + 14, box_y1 + 44, anchor='w', text=f"{cache_pct:.1f}%", fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 13, 'bold'))
 
-        self.canvas.create_text(box_x1 + col_w * 4 + 14, box_y1 + 20, anchor='w', text='THINKING', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
-        self.canvas.create_text(box_x1 + col_w * 4 + 14, box_y1 + 46, anchor='w', text=format_num(reasoning_tok), fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 13, 'bold'))
+        self.canvas.create_text(box_x1 + col_w * 4 + 14, box_y1 + 18, anchor='w', text='THINKING', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
+        self.canvas.create_text(box_x1 + col_w * 4 + 14, box_y1 + 44, anchor='w', text=format_num(reasoning_tok), fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 13, 'bold'))
 
-        # 3. DEDICATED SECTION: ACCOUNT MANAGER (y=176, h=106)
-        pool_header_y = 176
+        # 3. DEDICATED SECTION: ACCOUNT MANAGER (y=154, h=124)
+        pool_header_y = 154
         self.canvas.create_text(24, pool_header_y, anchor='w', text='ACCOUNT MANAGER', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
 
         providers = self.stats.get('providers_data', [])
@@ -972,14 +993,22 @@ class DynamicIslandHUD:
                                     callback=lambda: self.toggle_provider_active(curr_prov.get('raw_name'), any_active_in_prov),
                                     fill='#1C1C1F', fg=HEX_TEXT_SECONDARY if any_active_in_prov else HEX_GREEN, radius=8)
 
-        # Account Manager Card Container
+        # Account Manager Card Container (Height tuned to 124px)
         pool_box_y = pool_header_y + 16
-        pool_box_h = 106
+        pool_box_h = 124
 
         self.draw_rounded_card('pool_card', box_x1, pool_box_y, box_w, pool_box_h, radius=16)
 
         accs = curr_prov.get('accounts', [])
         prov_raw = curr_prov.get('raw_name', '')
+
+        # Provider-level Quota Limit calculations:
+        prov_acc_limits = [self.get_account_quota_limit(prov_raw, a.get('full_email') or a.get('name')) for a in accs]
+        prov_total_limit = sum(prov_acc_limits) if prov_acc_limits else self.get_account_quota_limit(prov_raw, 'default')
+        num_accs = max(1, len(accs))
+        prov_avg_limit = prov_total_limit / num_accs
+        prov_avg_used = curr_prov.get('total_toks', 0) / num_accs
+        prov_avg_pct = min(100.0, (prov_avg_used / prov_avg_limit * 100.0)) if prov_avg_limit > 0 else 0.0
 
         current_active_idx = 0
         for i, a in enumerate(accs):
@@ -994,65 +1023,10 @@ class DynamicIslandHUD:
 
         displayed_acc = accs[sel_acc_idx] if (accs and sel_acc_idx < len(accs)) else None
 
-        if displayed_acc:
-            acc_name = displayed_acc.get('full_email') or displayed_acc.get('name') or '--'
-            is_curr = displayed_acc.get('is_current', False)
-            is_on = displayed_acc.get('is_active', False)
-
-            status_text = "Active Route" if is_curr else ("Standby Ready" if is_on else "Exhausted / Disabled")
-            status_color = HEX_GREEN if is_curr else (HEX_TEXT_PRIMARY if is_on else HEX_TEXT_MUTED)
-
-            self.canvas.create_text(
-                box_x1 + 16, pool_box_y + 20, anchor='w',
-                text=acc_name,
-                fill=HEX_TEXT_PRIMARY,
-                font=(FONT_NAME, 11, 'bold')
-            )
-
-            quota_sub = f"Priority {displayed_acc.get('priority', 1)} • {status_text} • Today: {format_num(displayed_acc.get('toks', 0))} tok ({displayed_acc.get('reqs', 0)} reqs)"
-            self.canvas.create_text(
-                box_x1 + 16, pool_box_y + 42, anchor='w',
-                text=quota_sub,
-                fill=status_color,
-                font=(FONT_NAME, 8)
-            )
-
-            tot_p_sub = f"Provider Total: {curr_prov['active_count']}/{curr_prov['total_count']} Active • {format_num(curr_prov['total_toks'])} tok burned today"
-            self.canvas.create_text(
-                box_x1 + 16, pool_box_y + 64, anchor='w',
-                text=tot_p_sub,
-                fill=HEX_TEXT_MUTED,
-                font=(FONT_NAME, 8)
-            )
-
-            # Account Level Action Button with Clean Border Radius (radius=9)
-            acc_action_txt = "Deactivate Account" if is_on else "Activate Account"
-            acc_btn_color = '#381618' if is_on else '#122E1A'
-            acc_btn_border = '#662228' if is_on else '#1E5E2A'
-            acc_text_color = '#FF6961' if is_on else HEX_GREEN
-
-            ab_w = 124
-            ab_h = 20
-            ab_x1 = box_x1 + 16
-            ab_y1 = pool_box_y + 76
-            ab_x2 = ab_x1 + ab_w
-            ab_y2 = ab_y1 + ab_h
-
-            self.draw_pill_button_styled(ab_x1, ab_y1, ab_x2, ab_y2, acc_action_txt,
-                                        callback=lambda cid=displayed_acc.get('id'), st=is_on: self.toggle_account_active(cid, st),
-                                        fill=acc_btn_color, fg=acc_text_color, border=acc_btn_border, radius=9)
-        else:
-            self.canvas.create_text(
-                box_x1 + 16, pool_box_y + 47, anchor='w',
-                text="No accounts registered for this provider",
-                fill=HEX_TEXT_MUTED,
-                font=(FONT_NAME, 9)
-            )
-
         # Right Column: Interactive Account Slot Selector (Clickable 1..N) with rounded pills
         chain_w = 210
         chain_x_start = box_x1 + box_w - chain_w
-        self.canvas.create_text(chain_x_start, pool_box_y + 20, anchor='w', text='SELECT ACCOUNT', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 7, 'bold'))
+        self.canvas.create_text(chain_x_start, pool_box_y + 18, anchor='w', text='SELECT ACCOUNT', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 7, 'bold'))
 
         slot_x = chain_x_start
         for i, acc in enumerate(accs[:8]):
@@ -1077,21 +1051,123 @@ class DynamicIslandHUD:
             if is_selected:
                 btn_border = '#FFFFFF'
 
-            bx1, by1 = slot_x, pool_box_y + 36
-            bx2, by2 = slot_x + 22, pool_box_y + 60
+            bx1, by1 = slot_x, pool_box_y + 32
+            bx2, by2 = slot_x + 22, pool_box_y + 54
 
             self.draw_pill_button_styled(bx1, by1, bx2, by2, str(p_num),
                                         callback=lambda idx=i, pr=prov_raw: self.select_account_slot(pr, idx),
                                         fill=btn_fill, fg=btn_fg, border=btn_border, radius=6)
             slot_x += 26
 
+        if displayed_acc:
+            acc_name = displayed_acc.get('full_email') or displayed_acc.get('name') or '--'
+            is_curr = displayed_acc.get('is_current', False)
+            is_on = displayed_acc.get('is_active', False)
+
+            status_text = "Active Route" if is_curr else ("Standby Ready" if is_on else "Disabled")
+            status_color = HEX_GREEN if is_curr else (HEX_TEXT_PRIMARY if is_on else HEX_TEXT_MUTED)
+
+            # Account Quota Limit Calculations
+            acc_used_toks = displayed_acc.get('toks', 0)
+            acc_limit = self.get_account_quota_limit(prov_raw, acc_name)
+            acc_ratio = min(1.0, acc_used_toks / (acc_limit if acc_limit > 0 else 1))
+            acc_pct = (acc_used_toks / acc_limit * 100.0) if acc_limit > 0 else 0.0
+
+            # Line 1 (y=pool_box_y + 18): Account Name & Status Pill
+            self.canvas.create_text(
+                box_x1 + 16, pool_box_y + 18, anchor='w',
+                text=acc_name,
+                fill=HEX_TEXT_PRIMARY,
+                font=(FONT_NAME, 10, 'bold')
+            )
+            self.canvas.create_text(
+                box_x1 + 16 + min(220, len(acc_name) * 7 + 10), pool_box_y + 18, anchor='w',
+                text=f"•  P{displayed_acc.get('priority', 1)}  •  {status_text}",
+                fill=status_color,
+                font=(FONT_NAME, 8)
+            )
+
+            # Line 2 (y=pool_box_y + 44): Account Quota Tracker Bar + Figures
+            self.canvas.create_text(
+                box_x1 + 16, pool_box_y + 44, anchor='w',
+                text="Account Quota",
+                fill=HEX_TEXT_MUTED,
+                font=(FONT_NAME, 8)
+            )
+            bar_w_acc = 110
+            bar_x_acc = box_x1 + 96
+            self.canvas.create_rectangle(bar_x_acc, pool_box_y + 40, bar_x_acc + bar_w_acc, pool_box_y + 46, fill='#1C1C1E', outline='')
+            acc_bar_color = '#FF453A' if acc_pct >= 90 else ('#FF9F0A' if acc_pct >= 75 else HEX_GREEN)
+            self.canvas.create_rectangle(bar_x_acc, pool_box_y + 40, bar_x_acc + int(bar_w_acc * acc_ratio), pool_box_y + 46, fill=acc_bar_color, outline='')
+
+            quota_acc_str = f"{format_num(acc_used_toks)} / {format_num(acc_limit)} ({acc_pct:.1f}%)"
+            self.canvas.create_text(
+                bar_x_acc + bar_w_acc + 8, pool_box_y + 44, anchor='w',
+                text=quota_acc_str,
+                fill=HEX_TEXT_PRIMARY,
+                font=(FONT_NAME, 8, 'bold')
+            )
+
+            # Line 3 (y=pool_box_y + 68): Provider Level Quota Avg Tracker (Multiple Acc Math)
+            self.canvas.create_text(
+                box_x1 + 16, pool_box_y + 68, anchor='w',
+                text="Provider Avg",
+                fill=HEX_TEXT_MUTED,
+                font=(FONT_NAME, 8)
+            )
+            bar_w_prov = 110
+            bar_x_prov = box_x1 + 96
+            prov_ratio = min(1.0, prov_avg_used / (prov_avg_limit if prov_avg_limit > 0 else 1))
+            self.canvas.create_rectangle(bar_x_prov, pool_box_y + 64, bar_x_prov + bar_w_prov, pool_box_y + 70, fill='#1C1C1E', outline='')
+            self.canvas.create_rectangle(bar_x_prov, pool_box_y + 64, bar_x_prov + int(bar_w_prov * prov_ratio), pool_box_y + 70, fill='#8E8E93', outline='')
+
+            prov_avg_str = f"avg {format_num(prov_avg_used)} / {format_num(prov_avg_limit)} ({prov_avg_pct:.1f}% across {curr_prov.get('active_count')}/{curr_prov.get('total_count')} accs)"
+            self.canvas.create_text(
+                bar_x_prov + bar_w_prov + 8, pool_box_y + 68, anchor='w',
+                text=prov_avg_str,
+                fill=HEX_TEXT_SECONDARY,
+                font=(FONT_NAME, 8)
+            )
+
+            # Line 4 (y=pool_box_y + 96): Account Level Action Button with Clean Border Radius (radius=9)
+            acc_action_txt = "Deactivate Account" if is_on else "Activate Account"
+            acc_btn_color = '#381618' if is_on else '#122E1A'
+            acc_btn_border = '#662228' if is_on else '#1E5E2A'
+            acc_text_color = '#FF6961' if is_on else HEX_GREEN
+
+            ab_w = 124
+            ab_h = 20
+            ab_x1 = box_x1 + 16
+            ab_y1 = pool_box_y + 92
+            ab_x2 = ab_x1 + ab_w
+            ab_y2 = ab_y1 + ab_h
+
+            self.draw_pill_button_styled(ab_x1, ab_y1, ab_x2, ab_y2, acc_action_txt,
+                                        callback=lambda cid=displayed_acc.get('id'), st=is_on: self.toggle_account_active(cid, st),
+                                        fill=acc_btn_color, fg=acc_text_color, border=acc_btn_border, radius=9)
+
+            # Details footnote on the right of the button
+            self.canvas.create_text(
+                ab_x2 + 14, (ab_y1 + ab_y2) // 2, anchor='w',
+                text=f"Total Burn: {format_num(curr_prov['total_toks'])} tok • {curr_prov['total_reqs']} requests",
+                fill=HEX_TEXT_MUTED,
+                font=(FONT_NAME, 8)
+            )
+        else:
+            self.canvas.create_text(
+                box_x1 + 16, pool_box_y + 47, anchor='w',
+                text="No accounts registered for this provider",
+                fill=HEX_TEXT_MUTED,
+                font=(FONT_NAME, 9)
+            )
+
         # 4. TOP MODELS BREAKDOWN (Bold section title, 8px gap above bar)
-        models_header_y = pool_box_y + pool_box_h + 20
+        models_header_y = pool_box_y + pool_box_h + 14
         self.canvas.create_text(24, models_header_y, anchor='w', text='TOP MODELS BREAKDOWN', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
 
         sorted_models = sorted(self.stats['models'].items(), key=lambda item: item[1]['prompt'], reverse=True)[:3]
 
-        bar_y = models_header_y + 18
+        bar_y = models_header_y + 15
         for m_name, mdata in sorted_models:
             p_val = mdata['prompt'] + mdata['completion']
             r_val = mdata['requests']
@@ -1102,27 +1178,27 @@ class DynamicIslandHUD:
 
             bar_w_max = w - 48
             # 8px vertical gap between model label baseline and track bar
-            self.canvas.create_rectangle(24, bar_y + 14, 24 + bar_w_max, bar_y + 18, fill='#1C1C1E', outline='')
-            self.canvas.create_rectangle(24, bar_y + 14, 24 + int(bar_w_max * ratio), bar_y + 18, fill='#E5E5EA', outline='')
-            bar_y += 32
+            self.canvas.create_rectangle(24, bar_y + 12, 24 + bar_w_max, bar_y + 16, fill='#1C1C1E', outline='')
+            self.canvas.create_rectangle(24, bar_y + 12, 24 + int(bar_w_max * ratio), bar_y + 16, fill='#E5E5EA', outline='')
+            bar_y += 26
 
         # 5. LIVE API CALL HISTORY (Bold section title)
-        feed_header_y = bar_y + 12
+        feed_header_y = bar_y + 8
         self.canvas.create_text(24, feed_header_y, anchor='w', text='LIVE API CALL HISTORY', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
 
-        feed_y = feed_header_y + 20
+        feed_y = feed_header_y + 16
         for row in self.stats['recent'][:3]:
             t_ago = format_time_ago(row[1])
             m_tag = row[3]
             toks = row[4] + row[5]
             st = row[7]
 
-            self.canvas.create_rectangle(24, feed_y - 2, 24 + 48, feed_y + 16, fill='#072612' if st == 'ok' else '#260B0D', outline='')
-            self.canvas.create_text(48, feed_y + 7, anchor='center', text='200 OK' if st == 'ok' else 'ERR', fill=HEX_GREEN if st == 'ok' else '#FF453A', font=(FONT_NAME, 8, 'bold'))
+            self.canvas.create_rectangle(24, feed_y - 2, 24 + 48, feed_y + 15, fill='#072612' if st == 'ok' else '#260B0D', outline='')
+            self.canvas.create_text(48, feed_y + 6, anchor='center', text='200 OK' if st == 'ok' else 'ERR', fill=HEX_GREEN if st == 'ok' else '#FF453A', font=(FONT_NAME, 8, 'bold'))
 
-            self.canvas.create_text(82, feed_y + 7, anchor='w', text=f"{m_tag}", fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 9))
-            self.canvas.create_text(w - 24, feed_y + 7, anchor='e', text=f"+{format_num(toks)} tok • {t_ago}", fill=HEX_TEXT_SECONDARY, font=(FONT_NAME, 9))
-            feed_y += 24
+            self.canvas.create_text(82, feed_y + 6, anchor='w', text=f"{m_tag}", fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 9))
+            self.canvas.create_text(w - 24, feed_y + 6, anchor='e', text=f"+{format_num(toks)} tok • {t_ago}", fill=HEX_TEXT_SECONDARY, font=(FONT_NAME, 9))
+            feed_y += 21
 
     # --- UI Helpers & Rounded Card Rasterizers ---
     def draw_rounded_card(self, cache_key, x, y, width, height, radius=16):
