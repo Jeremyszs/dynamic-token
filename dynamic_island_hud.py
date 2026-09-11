@@ -69,7 +69,7 @@ PIL_RIM_GLOW_RGB = (48, 209, 88)
 VIEW_SPECS = {
     'min': (320, 42, 21),
     'normal': (520, 136, 26),
-    'detailed': (630, 560, 28)
+    'detailed': (630, 580, 28)
 }
 
 SWP_NOZORDER = 0x0004
@@ -417,6 +417,36 @@ class DynamicIslandHUD:
     def select_account_slot(self, prov_name, slot_idx):
         self.selected_account_indices[prov_name] = slot_idx
         self.is_dirty = True
+
+    def toggle_account_active(self, conn_id, current_status):
+        if not os.path.exists(DB_PATH) or not conn_id:
+            return
+        try:
+            con = sqlite3.connect(DB_PATH, timeout=5.0)
+            cur = con.cursor()
+            new_val = 0 if current_status else 1
+            now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            cur.execute('UPDATE providerConnections SET isActive = ?, updatedAt = ? WHERE id = ?', (new_val, now_iso, conn_id))
+            con.commit()
+            con.close()
+            self.fetch_database_data()
+        except Exception as e:
+            pass
+
+    def toggle_provider_active(self, prov_name, current_any_active):
+        if not os.path.exists(DB_PATH) or not prov_name:
+            return
+        try:
+            con = sqlite3.connect(DB_PATH, timeout=5.0)
+            cur = con.cursor()
+            new_val = 0 if current_any_active else 1
+            now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            cur.execute('UPDATE providerConnections SET isActive = ?, updatedAt = ? WHERE provider = ?', (new_val, now_iso, prov_name))
+            con.commit()
+            con.close()
+            self.fetch_database_data()
+        except Exception as e:
+            pass
 
     def fetch_database_data(self):
         try:
@@ -931,7 +961,7 @@ class DynamicIslandHUD:
         else:
             curr_prov = {'raw_name': '', 'clean_name': 'None', 'accounts': [], 'active_count': 0, 'total_count': 0, 'total_toks': 0, 'total_reqs': 0}
 
-        # Carousel Provider Navigation: [ ‹ ] [ Provider Name ] [ › ]
+        # Carousel Provider Navigation: [ ‹ ] [ Provider Name ] [ › ] + Provider Level Toggle [ Enable / Disable ]
         car_x = w - 24
         self.draw_circle_button(car_x - 12, pool_header_y, r=10, text='›', callback=self.next_provider)
         prov_label = f"{curr_prov['clean_name']} ({p_idx + 1}/{num_providers})"
@@ -939,8 +969,22 @@ class DynamicIslandHUD:
         prov_lbl_len = len(prov_label) * 6 + 18
         self.draw_circle_button(car_x - 32 - prov_lbl_len, pool_header_y, r=10, text='‹', callback=self.prev_provider)
 
-        pool_box_y = pool_header_y + 14
-        pool_box_h = 94
+        # Provider Level Action Button: [ Turn Off All ] / [ Turn On All ]
+        any_active_in_prov = (curr_prov.get('active_count', 0) > 0)
+        p_action_txt = "Disable All" if any_active_in_prov else "Enable All"
+        p_btn_w = 70
+        p_btn_x2 = car_x - 32 - prov_lbl_len - 14
+        p_btn_x1 = p_btn_x2 - p_btn_w
+        self.canvas.create_rectangle(p_btn_x1, pool_header_y - 10, p_btn_x2, pool_header_y + 10, fill='#1C1C1F', outline=HEX_BORDER, width=1)
+        self.canvas.create_text((p_btn_x1 + p_btn_x2) // 2, pool_header_y, text=p_action_txt, fill=HEX_TEXT_SECONDARY if any_active_in_prov else HEX_GREEN, font=(FONT_NAME, 7, 'bold'))
+
+        def make_prov_toggle(pr=curr_prov.get('raw_name'), any_act=any_active_in_prov):
+            return lambda: self.toggle_provider_active(pr, any_act)
+
+        self.hit_zones.append((p_btn_x1, pool_header_y - 10, p_btn_x2, pool_header_y + 10, make_prov_toggle(curr_prov.get('raw_name'), any_active_in_prov)))
+
+        pool_box_y = pool_header_y + 16
+        pool_box_h = 100
 
         pool_img = Image.new('RGBA', (box_w, pool_box_h), (1, 1, 1, 0))
         p_draw = ImageDraw.Draw(pool_img)
@@ -974,7 +1018,7 @@ class DynamicIslandHUD:
             status_color = HEX_GREEN if is_curr else (HEX_TEXT_PRIMARY if is_on else HEX_TEXT_MUTED)
 
             self.canvas.create_text(
-                box_x1 + 16, pool_box_y + 22, anchor='w',
+                box_x1 + 16, pool_box_y + 20, anchor='w',
                 text=acc_name,
                 fill=HEX_TEXT_PRIMARY,
                 font=(FONT_NAME, 11, 'bold')
@@ -982,7 +1026,7 @@ class DynamicIslandHUD:
 
             quota_sub = f"Priority {displayed_acc.get('priority', 1)} • {status_text} • Today: {format_num(displayed_acc.get('toks', 0))} tok ({displayed_acc.get('reqs', 0)} reqs)"
             self.canvas.create_text(
-                box_x1 + 16, pool_box_y + 45, anchor='w',
+                box_x1 + 16, pool_box_y + 42, anchor='w',
                 text=quota_sub,
                 fill=status_color,
                 font=(FONT_NAME, 8)
@@ -990,11 +1034,32 @@ class DynamicIslandHUD:
 
             tot_p_sub = f"Provider Total: {curr_prov['active_count']}/{curr_prov['total_count']} Active • {format_num(curr_prov['total_toks'])} tok burned today"
             self.canvas.create_text(
-                box_x1 + 16, pool_box_y + 68, anchor='w',
+                box_x1 + 16, pool_box_y + 64, anchor='w',
                 text=tot_p_sub,
                 fill=HEX_TEXT_MUTED,
                 font=(FONT_NAME, 8)
             )
+
+            # Account Level Action Button: [ Deactivate ] or [ Activate ]
+            acc_action_txt = "Deactivate Account" if is_on else "Activate Account"
+            acc_btn_color = '#381618' if is_on else '#122E1A'
+            acc_btn_border = '#662228' if is_on else '#1E5E2A'
+            acc_text_color = '#FF6961' if is_on else HEX_GREEN
+
+            ab_w = 120
+            ab_h = 18
+            ab_x1 = box_x1 + 16
+            ab_y1 = pool_box_y + 76
+            ab_x2 = ab_x1 + ab_w
+            ab_y2 = ab_y1 + ab_h
+
+            self.canvas.create_rectangle(ab_x1, ab_y1, ab_x2, ab_y2, fill=acc_btn_color, outline=acc_btn_border, width=1)
+            self.canvas.create_text((ab_x1 + ab_x2) // 2, (ab_y1 + ab_y2) // 2, text=acc_action_txt, fill=acc_text_color, font=(FONT_NAME, 7, 'bold'))
+
+            def make_acc_toggle(cid=displayed_acc.get('id'), on_st=is_on):
+                return lambda: self.toggle_account_active(cid, on_st)
+
+            self.hit_zones.append((ab_x1, ab_y1, ab_x2, ab_y2, make_acc_toggle(displayed_acc.get('id'), is_on)))
         else:
             self.canvas.create_text(
                 box_x1 + 16, pool_box_y + 47, anchor='w',
