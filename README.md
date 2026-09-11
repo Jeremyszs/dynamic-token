@@ -47,15 +47,16 @@ python -m venv venv
 .\venv\Scripts\pip install -r requirements.txt
 ```
 
-*(If you don't have a `requirements.txt`, install directly:)*
-```bash
-pip install pillow pywin32
-```
+*(Includes `PySide6` for GPU-accelerated Qt Quick / QML rendering, `Pillow`, and `pywin32`)*
 
 ### 3. Run the HUD
-Double-click `dynamic-token.bat` or run from terminal:
-```cmd
-dynamic-token.bat
+To run the modern GPU-accelerated PySide6 + Qt Quick version:
+```bash
+python -m app.main
+```
+Or use the launcher `dynamic-token.bat`. To run the legacy Tkinter fallback version:
+```bash
+python dynamic_island_hud.py
 ```
 
 The launcher automatically detects:
