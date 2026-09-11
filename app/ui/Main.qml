@@ -93,6 +93,8 @@ Window {
         MinView {
             id: minView
             visible: controller ? (controller.currentView === "min") : true
+            enabled: visible
+            opacity: visible ? 1.0 : 0.0
             anchors.fill: parent
             anchors.rightMargin: (controller && controller.isSplitActive) ? 56 : 0
         }
@@ -101,6 +103,8 @@ Window {
         NormalView {
             id: normalView
             visible: controller ? (controller.currentView === "normal") : false
+            enabled: visible
+            opacity: visible ? 1.0 : 0.0
             anchors.fill: parent
         }
 
@@ -108,6 +112,8 @@ Window {
         DetailedView {
             id: detailedView
             visible: controller ? (controller.currentView === "detailed") : false
+            enabled: visible
+            opacity: visible ? 1.0 : 0.0
             anchors.fill: parent
         }
 
