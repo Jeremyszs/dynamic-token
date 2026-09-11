@@ -693,7 +693,12 @@ class DynamicIslandHUD:
     def check_startup_registration(self):
         try:
             key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-            bat_path = os.path.expandvars(r"%USERPROFILE%\dynamic-token\launch_island_hud.bat")
+            # Resolve dynamic-token.bat relative to this script directory so it works for any user or install path
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            bat_path = os.path.join(script_dir, 'dynamic-token.bat')
+            if not os.path.exists(bat_path):
+                bat_path = os.path.expandvars(r"%USERPROFILE%\dynamic-token\dynamic-token.bat")
+
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ | winreg.KEY_SET_VALUE) as key:
                 try:
                     val, _ = winreg.QueryValueEx(key, 'DynamicTokenHUD')
