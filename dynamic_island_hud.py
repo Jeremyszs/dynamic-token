@@ -66,6 +66,7 @@ PIL_CARD_BORDER = (38, 38, 41, 255)
 PIL_TAB_ACTIVE = (42, 42, 45, 255)
 PIL_TAB_INACTIVE = (18, 18, 20, 255)
 PIL_RIM_GLOW_RGB = (48, 209, 88)
+RASTER_SCALE = 2
 
 # Fixed / Static Window Dimensions (No scrolling, perfectly fits all cards)
 VIEW_SPECS = {
@@ -191,6 +192,11 @@ class DynamicIslandHUD:
         self.hit_zones = []
         self.bg_photo = None
         self.card_photos = {}
+        self._capsule_cache = {}
+        self._capsule_photo_cache = {}
+        self._last_morph_paint = 0.0
+        self._morph_photo_key = None
+        self._morph_region_key = None
 
         self.init_antialiased_dots()
 
@@ -334,6 +340,7 @@ class DynamicIslandHUD:
 
         # Render target components immediately on click (eliminates all latency/delay)
         self.hit_zones.clear()
+        self.is_animating = True
         for item in self.canvas.find_all():
             if 'bg' not in self.canvas.gettags(item):
                 self.canvas.delete(item)
@@ -679,6 +686,7 @@ class DynamicIslandHUD:
         stiffness = 169.0
         damping = 26.0
 
+        morph_updated = False
         if self.is_animating:
             force_w = (self.target_w - self.curr_w) * stiffness - self.vel_w * damping
             force_h = (self.target_h - self.curr_h) * stiffness - self.vel_h * damping
@@ -734,15 +742,27 @@ class DynamicIslandHUD:
         self.root.after(6, self.tick_loop)
 
     def draw_capsule_image(self, w, h, radius):
-        im = Image.new('RGBA', (w, h), (1, 1, 1, 0))
+        # Render rounded geometry above display resolution, then downsample once.
+        # This keeps the 1px perimeter from becoming stair-stepped at small sizes.
+        scale = RASTER_SCALE
+        rw, rh = max(1, w * scale), max(1, h * scale)
+        rr = radius * scale
+        border_col = PIL_BORDER_HOVER if self.is_hovered else PIL_BORDER
+        cache_key = (w, h, radius, border_col)
+        time_since_call = time.time() - self.last_activity_time
+        if time_since_call >= 2.5 and not getattr(self, 'is_animating', False) and cache_key in self._capsule_cache:
+            return self._capsule_cache[cache_key]
+
+        # Composite onto the color-key background before downsampling.
+        # Resampling transparent RGBA edges can leave bright fringe pixels.
+        im = Image.new('RGBA', (rw, rh), (1, 1, 1, 0))
         draw = ImageDraw.Draw(im)
 
         # 1. Base Pitch Black Fill
-        draw.rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, fill=PIL_ISLAND_BG)
+        draw.rounded_rectangle([0, 0, rw - 1, rh - 1], radius=rr, fill=PIL_ISLAND_BG)
 
         # 2. Base Perimeter Border
-        border_col = PIL_BORDER_HOVER if self.is_hovered else PIL_BORDER
-        draw.rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, outline=border_col, width=1)
+        draw.rounded_rectangle([0, 0, rw - 1, rh - 1], radius=rr, outline=border_col, width=scale)
 
         # 3. Specular Perimeter Rim Glow (Siri/AirDrop neon beam)
         time_since_call = time.time() - self.last_activity_time
@@ -751,13 +771,29 @@ class DynamicIslandHUD:
             pulse_brightness = (math.sin(self.rim_glow_phase * 2.0) + 1.0) / 2.0
             alpha = int(220 * intensity * (0.6 + pulse_brightness * 0.4))
             rim_col = (*PIL_RIM_GLOW_RGB, alpha)
-            draw.rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, outline=rim_col, width=2)
+            draw.rounded_rectangle([0, 0, rw - 1, rh - 1], radius=rr, outline=rim_col, width=3 * scale)
 
-        return im
+        # Flatten the resized edge onto the color-key background so transparent
+        # edge pixels cannot become isolated bright fringes in Tk.
+        result = im.resize((w, h), Image.Resampling.LANCZOS)
+        key_bg = Image.new('RGBA', result.size, (1, 1, 1, 255))
+        result = Image.alpha_composite(key_bg, result).convert('RGB')
+        if time_since_call >= 2.5 and not getattr(self, 'is_animating', False):
+            self._capsule_cache[cache_key] = result
+        return result
 
     def update_morph_layout(self, w, h, radius):
-        img = self.draw_capsule_image(w, h, radius)
-        self.bg_photo = ImageTk.PhotoImage(img)
+        rim_active = time.time() - self.last_activity_time < 2.5
+        now = time.perf_counter()
+        paint_key = (w, h, radius, self.is_hovered)
+        if (rim_active or getattr(self, 'is_animating', False)) and now - self._last_morph_paint >= (1.0 / 60.0):
+            # Limit expensive supersampled paints to a visual 60Hz ceiling.
+            self.bg_photo = ImageTk.PhotoImage(self.draw_capsule_image(w, h, radius))
+            self._last_morph_paint = now
+        elif not rim_active and not getattr(self, 'is_animating', False):
+            if paint_key not in self._capsule_photo_cache:
+                self._capsule_photo_cache[paint_key] = ImageTk.PhotoImage(self.draw_capsule_image(w, h, radius))
+            self.bg_photo = self._capsule_photo_cache[paint_key]
 
         if not self.canvas.find_withtag('bg'):
             self.canvas.create_image(0, 0, anchor='nw', image=self.bg_photo, tags='bg')
@@ -952,8 +988,8 @@ class DynamicIslandHUD:
         )
 
         # Header Controls: Minimize and Shutdown
-        self.draw_circle_button(w - 62, 24, r=12, text='—', callback=lambda: self.set_view('min'))
-        self.draw_circle_button(w - 32, 24, r=12, text='X', callback=self.shutdown, bg='#241416', fg='#FF453A', border='#4A1E22')
+        self.draw_circle_button(w - 62, 24, r=12, text='minimize', callback=lambda: self.set_view('min'))
+        self.draw_circle_button(w - 32, 24, r=12, text='close', callback=self.shutdown, bg='#241416', fg='#FF453A', border='#4A1E22')
 
         # Row 2 (y=54): Timeline Tabs & Latency Metric
         self.render_timeline_tabs(24, 54, anchor='w')
@@ -1017,6 +1053,7 @@ class DynamicIslandHUD:
             p_idx = self.selected_provider_idx % num_providers
             curr_prov = providers[p_idx]
         else:
+            p_idx = 0
             curr_prov = {'raw_name': '', 'clean_name': 'None', 'accounts': [], 'active_count': 0, 'total_count': 0, 'total_toks': 0, 'total_reqs': 0}
 
         # Carousel Provider Navigation: [ ‹ ] [ Provider Name ] [ › ]
@@ -1256,13 +1293,28 @@ class DynamicIslandHUD:
             feed_y += 22
 
     # --- UI Helpers & Rounded Card Rasterizers ---
+    def rounded_image(self, width, height, radius, fill, border, outline_width=1):
+        # Supersample all rounded geometry so borders share one smooth rendering path.
+        scale = RASTER_SCALE
+        image = Image.new('RGBA', (width * scale, height * scale), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        draw.rounded_rectangle(
+            [0, 0, width * scale - 1, height * scale - 1],
+            radius=radius * scale,
+            fill=fill,
+            outline=border,
+            width=max(1, outline_width * scale)
+        )
+        # Return RGBA image directly with true alpha so sub-elements overlay cleanly
+        # on the dark capsule without colorkey punch-through forming rectangular corners.
+        return image.resize((width, height), Image.Resampling.LANCZOS)
+
     def draw_rounded_card(self, cache_key, x, y, width, height, radius=16):
         card_key = f"{cache_key}_{width}_{height}_{radius}"
         if card_key not in self.card_photos:
-            card_img = Image.new('RGBA', (width, height), (1, 1, 1, 0))
-            cdraw = ImageDraw.Draw(card_img)
-            cdraw.rounded_rectangle([0, 0, width - 1, height - 1], radius=radius, fill=PIL_CARD_BG, outline=PIL_CARD_BORDER, width=1)
-            self.card_photos[card_key] = ImageTk.PhotoImage(card_img)
+            self.card_photos[card_key] = ImageTk.PhotoImage(
+                self.rounded_image(width, height, radius, PIL_CARD_BG, PIL_CARD_BORDER)
+            )
         self.canvas.create_image(x, y, anchor='nw', image=self.card_photos[card_key])
 
     def draw_pill_button_styled(self, x1, y1, x2, y2, text, callback, fill='#1C1C1F', fg=HEX_TEXT_PRIMARY, border=HEX_BORDER, radius=8):
@@ -1270,10 +1322,9 @@ class DynamicIslandHUD:
         bh = max(4, y2 - y1)
         key = f"pill_{bw}_{bh}_{fill}_{border}_{radius}"
         if key not in self.card_photos:
-            im = Image.new('RGBA', (bw, bh), (1, 1, 1, 0))
-            d = ImageDraw.Draw(im)
-            d.rounded_rectangle([0, 0, bw - 1, bh - 1], radius=radius, fill=fill, outline=border, width=1)
-            self.card_photos[key] = ImageTk.PhotoImage(im)
+            self.card_photos[key] = ImageTk.PhotoImage(
+                self.rounded_image(bw, bh, radius, fill, border)
+            )
 
         self.canvas.create_image(x1, y1, anchor='nw', image=self.card_photos[key])
         self.canvas.create_text((x1 + x2) // 2, (y1 + y2) // 2, text=text, fill=fg, font=(FONT_NAME, 7, 'bold'))
@@ -1296,12 +1347,11 @@ class DynamicIslandHUD:
             is_active = (self.timeline == key)
             tab_img_key = f"tab_{key}_{is_active}"
             if tab_img_key not in self.card_photos:
-                t_img = Image.new('RGBA', (tab_w, tab_h), (1, 1, 1, 0))
-                tdraw = ImageDraw.Draw(t_img)
                 bg_c = PIL_TAB_ACTIVE if is_active else PIL_TAB_INACTIVE
                 bd_c = (60, 60, 64, 255) if is_active else (32, 32, 35, 255)
-                tdraw.rounded_rectangle([0, 0, tab_w - 1, tab_h - 1], radius=12, fill=bg_c, outline=bd_c, width=1)
-                self.card_photos[tab_img_key] = ImageTk.PhotoImage(t_img)
+                self.card_photos[tab_img_key] = ImageTk.PhotoImage(
+                    self.rounded_image(tab_w, tab_h, 12, bg_c, bd_c)
+                )
 
             self.canvas.create_image(bx1, by1, anchor='nw', image=self.card_photos[tab_img_key])
             fg = HEX_TEXT_PRIMARY if is_active else HEX_TEXT_MUTED
@@ -1313,8 +1363,23 @@ class DynamicIslandHUD:
             self.hit_zones.append((bx1, by1, bx2, by2, make_handler(key)))
 
     def draw_circle_button(self, cx, cy, r, text, callback, bg='#1C1C1E', fg=HEX_TEXT_PRIMARY, border=HEX_BORDER):
-        self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, fill=bg, outline=border, width=1)
-        self.canvas.create_text(cx, cy, text=text, fill=fg, font=(FONT_NAME, 8, 'bold'))
+        size = (r * 2) + 1
+        key = f"circle_{size}_{bg}_{border}"
+        if key not in self.card_photos:
+            self.card_photos[key] = ImageTk.PhotoImage(
+                self.rounded_image(size, size, r, bg, border)
+            )
+        self.canvas.create_image(cx - r, cy - r, anchor='nw', image=self.card_photos[key])
+
+        if text in ('close', '✕'):
+            # Geometric cross, not a font glyph: stable weight and optical centering.
+            d = 4
+            self.canvas.create_line(cx - d, cy - d, cx + d, cy + d, fill=fg, width=2, capstyle='round')
+            self.canvas.create_line(cx - d, cy + d, cx + d, cy - d, fill=fg, width=2, capstyle='round')
+        elif text == 'minimize':
+            self.canvas.create_line(cx - 4, cy, cx + 4, cy, fill=fg, width=2, capstyle='round')
+        else:
+            self.canvas.create_text(cx, cy, text=text, fill=fg, font=(FONT_NAME, 8, 'bold'))
         self.hit_zones.append((cx - r, cy - r, cx + r, cy + r, callback))
 
     def shutdown(self):
