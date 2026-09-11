@@ -7,6 +7,9 @@ Built with native Python and Win32 APIs for near-zero resource impact (~15MB RAM
 ## Features
 - **Apple Dynamic Island Aesthetics:** Pitch-black container, smooth pill/capsule corners, and a 4× supersampled anti-aliased live status indicator.
 - **Harmonic Spring Motion:** Calibrated 2nd-order damped spring physics (`stiffness = 169.0`, `damping = 26.0`) with in-place glyph translation (zero canvas churn).
+- **Dynamic Shape Transformations:**
+  - **The Split Island (Dual Capsule Ejection):** When an API call completes with live token generation, an independent activity bubble smoothly detaches to the right of the main capsule displaying real-time speed (`⚡ 548 tok/s`), then snaps back into the unified capsule when idle.
+  - **Magnetic Top-Notch Docking:** Dragging and releasing the widget near the physical top edge of any display causes the upper corners to seamlessly flatten (`r_top=0`, `r_bottom=21`), transforming the island into a hardware-style display notch flush with the screen bezel.
 - **Three Interactive View Tiers:**
   - **Minimum:** Compact pill displaying active model, live token count, and cost. Features an **interactive hover peek** that smoothly expands on mouseover to reveal live generation throughput (`tok/s`) and quota reset countdown (`Resets 44m`).
   - **Normal:** Expanded card with timeline filters, large typography, requests count, and last executed request ticker.

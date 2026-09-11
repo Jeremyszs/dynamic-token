@@ -270,6 +270,14 @@ class DynamicIslandHUD:
         self.is_9router_running = False
         self.live_quotas_cache = {}
         self._fetching_conn_ids = set()
+
+        # Dynamic Shape Transformations (Notch Docking & Split Island)
+        self.is_docked_notch = False
+        self.notch_morph_progress = 0.0  # 0.0 = full floating pill, 1.0 = hardware notch flat top
+        self.is_split_active = False
+        self.split_morph_progress = 0.0  # 0.0 = continuous capsule, 1.0 = detached bubble
+        self.split_bubble_w = 46.0
+        self.split_bubble_gap = 10.0
         self._last_live_quota_fetch = 0.0
 
         self.check_startup_registration()
@@ -341,6 +349,9 @@ class DynamicIslandHUD:
                     self.timeline = cfg.get('timeline', 'today')
                     self.selected_provider_idx = cfg.get('provider_idx', 0)
                     self.custom_quotas = cfg.get('quotas', {})
+                    self.is_docked_notch = cfg.get('docked_notch', False)
+                    if self.is_docked_notch:
+                        self.notch_morph_progress = 1.0
             except Exception:
                 pass
 
@@ -354,7 +365,8 @@ class DynamicIslandHUD:
                     'view': self.current_view,
                     'timeline': self.timeline,
                     'provider_idx': self.selected_provider_idx,
-                    'quotas': self.custom_quotas
+                    'quotas': self.custom_quotas,
+                    'docked_notch': self.is_docked_notch
                 }, f)
         except Exception:
             pass
@@ -372,6 +384,14 @@ class DynamicIslandHUD:
             hmon = win32api.MonitorFromWindow(self.hwnd, win32con.MONITOR_DEFAULTTONEAREST)
             info = win32api.GetMonitorInfo(hmon)
             return info['Work']
+        except Exception:
+            return (0, 0, self.screen_w, self.screen_h)
+
+    def get_current_monitor_rect(self):
+        try:
+            hmon = win32api.MonitorFromWindow(self.hwnd, win32con.MONITOR_DEFAULTTONEAREST)
+            info = win32api.GetMonitorInfo(hmon)
+            return info['Monitor']
         except Exception:
             return (0, 0, self.screen_w, self.screen_h)
 
@@ -480,9 +500,24 @@ class DynamicIslandHUD:
             rect = win32gui.GetWindowRect(self.hwnd)
             self.curr_x = float(rect[0])
             self.curr_y = float(rect[1])
+
+            # Magnetic Screen-Top Notch Docking Check:
+            # If user drops the widget within 16px of the physical monitor's top edge, snap into hardware notch mode!
+            mon_rect = self.get_current_monitor_rect()
+            top_edge = float(mon_rect[1])
+            dist_to_top = abs(self.curr_y - top_edge)
+            if dist_to_top <= 16.0:
+                self.is_docked_notch = True
+                self.target_y = top_edge
+                self.curr_y = top_edge
+                user32.SetWindowPos(self.hwnd, 0, int(self.curr_x), int(top_edge), 0, 0, SWP_MOVE_FLAGS)
+            else:
+                self.is_docked_notch = False
+                self.target_y = self.curr_y
+
             self.target_x = self.curr_x
-            self.target_y = self.curr_y
             self.anchor_center_x = self.curr_x + (self.curr_w / 2.0)
+            self.is_dirty = True
             self.save_config()
             return
 
@@ -925,7 +960,28 @@ class DynamicIslandHUD:
             self.update_antialiased_dot()
 
             time_since_call = time.time() - self.last_activity_time
-            if time_since_call < 2.5:
+
+            # Update Split Island active condition:
+            # Active when a call completed within 3.5 seconds AND latest_tps > 0 in min view
+            want_split = (self.current_view == 'min' and time_since_call < 3.5 and getattr(self, 'latest_tps', None) is not None)
+            target_split = 1.0 if want_split else 0.0
+            if abs(self.split_morph_progress - target_split) > 0.005:
+                self.split_morph_progress += (target_split - self.split_morph_progress) * min(1.0, dt * 16.0)
+                morph_updated = True
+            elif self.split_morph_progress != target_split:
+                self.split_morph_progress = target_split
+                morph_updated = True
+
+            # Update Notch Docking condition:
+            target_notch = 1.0 if self.is_docked_notch else 0.0
+            if abs(self.notch_morph_progress - target_notch) > 0.005:
+                self.notch_morph_progress += (target_notch - self.notch_morph_progress) * min(1.0, dt * 16.0)
+                morph_updated = True
+            elif self.notch_morph_progress != target_notch:
+                self.notch_morph_progress = target_notch
+                morph_updated = True
+
+            if morph_updated or time_since_call < 2.5:
                 self.update_morph_layout(int(self.curr_w), int(self.curr_h), int(self.curr_r))
 
             if self.last_delta_time != 0 and (time.time() - self.last_delta_time) > 1.8:
@@ -945,36 +1001,65 @@ class DynamicIslandHUD:
         rw, rh = max(1, w * scale), max(1, h * scale)
         rr = radius * scale
         border_col = PIL_BORDER_HOVER if self.is_hovered else PIL_BORDER
-        cache_key = (w, h, radius, border_col)
+
+        is_split = (self.current_view == 'min' and self.split_morph_progress > 0.01)
+        is_notch = (self.notch_morph_progress > 0.01)
+
+        cache_key = (w, h, radius, border_col, round(self.split_morph_progress, 2), round(self.notch_morph_progress, 2))
         time_since_call = time.time() - self.last_activity_time
         if time_since_call >= 2.5 and not getattr(self, 'is_animating', False) and cache_key in self._capsule_cache:
             return self._capsule_cache[cache_key]
 
         # Composite onto the color-key background before downsampling.
-        # Resampling transparent RGBA edges can leave bright fringe pixels.
         im = Image.new('RGBA', (rw, rh), (*PIL_TRANSPARENT_RGB, 0))
         draw = ImageDraw.Draw(im)
 
-        # 1. Base Pitch Black Fill
-        draw.rounded_rectangle([0, 0, rw - 1, rh - 1], radius=rr, fill=PIL_ISLAND_BG)
+        # Determine geometry for Notch Docking vs Floating Island
+        # When notch_morph_progress > 0.0, top corners smoothly flatten
+        top_corners = not is_notch
 
-        # 2. Base Perimeter Border
-        draw.rounded_rectangle([0, 0, rw - 1, rh - 1], radius=rr, outline=border_col, width=scale)
+        if is_split:
+            # Dual Capsule Ejection geometry:
+            # Capsule 1 (Left main pill): [0, 0, main_w, h]
+            # Capsule 2 (Right detached activity bubble): [main_w + gap, 0, w, h]
+            gap_scaled = int(self.split_bubble_gap * self.split_morph_progress * scale)
+            b_w_scaled = int(self.split_bubble_w * scale)
+            main_rw = rw - gap_scaled - b_w_scaled
+            r_bubble = rh // 2
 
-        # 3. Specular Perimeter Rim Glow (Siri/AirDrop neon beam, red for error, green for normal)
-        time_since_call = time.time() - self.last_activity_time
-        if time_since_call < 2.5:
-            intensity = max(0.0, 1.0 - (time_since_call / 2.5))
-            pulse_brightness = (math.sin(self.rim_glow_phase * 2.0) + 1.0) / 2.0
-            alpha = int(220 * intensity * (0.6 + pulse_brightness * 0.4))
-            glow_rgb = PIL_RIM_GLOW_ERROR_RGB if getattr(self, 'last_activity_is_error', False) else PIL_RIM_GLOW_RGB
-            rim_col = (*glow_rgb, alpha)
-            draw.rounded_rectangle([0, 0, rw - 1, rh - 1], radius=rr, outline=rim_col, width=3 * scale)
+            # Left capsule
+            draw.rounded_rectangle([0, 0, main_rw - 1, rh - 1], radius=rr, fill=PIL_ISLAND_BG, corners=(top_corners, top_corners, True, True))
+            draw.rounded_rectangle([0, 0, main_rw - 1, rh - 1], radius=rr, outline=border_col, width=scale, corners=(top_corners, top_corners, True, True))
+
+            # Right detached bubble
+            bx1 = main_rw + gap_scaled
+            bx2 = rw - 1
+            draw.rounded_rectangle([bx1, 0, bx2, rh - 1], radius=r_bubble, fill=PIL_ISLAND_BG)
+            draw.rounded_rectangle([bx1, 0, bx2, rh - 1], radius=r_bubble, outline=border_col, width=scale)
+
+            # Specular rim glow
+            if time_since_call < 2.5:
+                intensity = max(0.0, 1.0 - (time_since_call / 2.5))
+                pulse_brightness = (math.sin(self.rim_glow_phase * 2.0) + 1.0) / 2.0
+                alpha = int(220 * intensity * (0.6 + pulse_brightness * 0.4))
+                glow_rgb = PIL_RIM_GLOW_ERROR_RGB if getattr(self, 'last_activity_is_error', False) else PIL_RIM_GLOW_RGB
+                rim_col = (*glow_rgb, alpha)
+                draw.rounded_rectangle([0, 0, main_rw - 1, rh - 1], radius=rr, outline=rim_col, width=3 * scale, corners=(top_corners, top_corners, True, True))
+                draw.rounded_rectangle([bx1, 0, bx2, rh - 1], radius=r_bubble, outline=rim_col, width=3 * scale)
+        else:
+            # Single continuous capsule
+            draw.rounded_rectangle([0, 0, rw - 1, rh - 1], radius=rr, fill=PIL_ISLAND_BG, corners=(top_corners, top_corners, True, True))
+            draw.rounded_rectangle([0, 0, rw - 1, rh - 1], radius=rr, outline=border_col, width=scale, corners=(top_corners, top_corners, True, True))
+
+            if time_since_call < 2.5:
+                intensity = max(0.0, 1.0 - (time_since_call / 2.5))
+                pulse_brightness = (math.sin(self.rim_glow_phase * 2.0) + 1.0) / 2.0
+                alpha = int(220 * intensity * (0.6 + pulse_brightness * 0.4))
+                glow_rgb = PIL_RIM_GLOW_ERROR_RGB if getattr(self, 'last_activity_is_error', False) else PIL_RIM_GLOW_RGB
+                rim_col = (*glow_rgb, alpha)
+                draw.rounded_rectangle([0, 0, rw - 1, rh - 1], radius=rr, outline=rim_col, width=3 * scale, corners=(top_corners, top_corners, True, True))
 
         # Flatten the resized edge onto the asymmetric color-key background.
-        # Using asymmetric #010203 guarantees that symmetric grayscale Lanczos ringing
-        # (e.g. (1, 1, 1)) inside the capsule never matches the window transparent color,
-        # completely preventing punch-through holes along the curved corner border.
         result = im.resize((w, h), Image.Resampling.LANCZOS)
         key_bg = Image.new('RGBA', result.size, (*PIL_TRANSPARENT_RGB, 255))
         result = Image.alpha_composite(key_bg, result).convert('RGB')
@@ -985,7 +1070,7 @@ class DynamicIslandHUD:
     def update_morph_layout(self, w, h, radius):
         rim_active = time.time() - self.last_activity_time < 2.5
         now = time.perf_counter()
-        paint_key = (w, h, radius, self.is_hovered)
+        paint_key = (w, h, radius, self.is_hovered, round(self.split_morph_progress, 2), round(self.notch_morph_progress, 2))
         if (rim_active or getattr(self, 'is_animating', False)) and now - self._last_morph_paint >= (1.0 / 60.0):
             # Limit expensive supersampled paints to a visual 60Hz ceiling.
             self.bg_photo = ImageTk.PhotoImage(self.draw_capsule_image(w, h, radius))
@@ -1000,21 +1085,64 @@ class DynamicIslandHUD:
         else:
             self.canvas.itemconfig('bg', image=self.bg_photo)
 
-        # Hardware-level window shape clipping: eliminates any chance of Windows painting square corners outside the capsule
+        # Hardware-level window shape clipping: eliminates square corners outside geometry
         try:
-            hrgn = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, int(w) + 1, int(h) + 1, int(radius * 2), int(radius * 2))
-            user32.SetWindowRgn(self.hwnd, hrgn, False)
+            is_split = (self.current_view == 'min' and self.split_morph_progress > 0.01)
+            is_notch = (self.notch_morph_progress > 0.01)
+            if is_split:
+                gap = int(self.split_bubble_gap * self.split_morph_progress)
+                bw = int(self.split_bubble_w)
+                main_w = w - gap - bw
+                hrgn_main = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, int(main_w) + 1, int(h) + 1, int(radius * 2), int(radius * 2))
+                if is_notch:
+                    hrgn_rect = ctypes.windll.gdi32.CreateRectRgn(0, 0, int(main_w) + 1, int(radius) + 1)
+                    hrgn_notch = ctypes.windll.gdi32.CreateRectRgn(0, 0, 0, 0)
+                    ctypes.windll.gdi32.CombineRgn(hrgn_notch, hrgn_rect, hrgn_main, 2)
+                    ctypes.windll.gdi32.DeleteObject(hrgn_main)
+                    ctypes.windll.gdi32.DeleteObject(hrgn_rect)
+                    hrgn_main = hrgn_notch
+
+                hrgn_bubble = ctypes.windll.gdi32.CreateRoundRectRgn(int(main_w + gap), 0, int(w) + 1, int(h) + 1, int(h), int(h))
+                hrgn_comb = ctypes.windll.gdi32.CreateRectRgn(0, 0, 0, 0)
+                ctypes.windll.gdi32.CombineRgn(hrgn_comb, hrgn_main, hrgn_bubble, 2)
+                ctypes.windll.gdi32.DeleteObject(hrgn_main)
+                ctypes.windll.gdi32.DeleteObject(hrgn_bubble)
+                user32.SetWindowRgn(self.hwnd, hrgn_comb, False)
+            elif is_notch:
+                hrgn_round = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, int(w) + 1, int(h) + 1, int(radius * 2), int(radius * 2))
+                hrgn_rect = ctypes.windll.gdi32.CreateRectRgn(0, 0, int(w) + 1, int(radius) + 1)
+                hrgn_notch = ctypes.windll.gdi32.CreateRectRgn(0, 0, 0, 0)
+                ctypes.windll.gdi32.CombineRgn(hrgn_notch, hrgn_rect, hrgn_round, 2)
+                ctypes.windll.gdi32.DeleteObject(hrgn_round)
+                ctypes.windll.gdi32.DeleteObject(hrgn_rect)
+                user32.SetWindowRgn(self.hwnd, hrgn_notch, False)
+            else:
+                hrgn = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, int(w) + 1, int(h) + 1, int(radius * 2), int(radius * 2))
+                user32.SetWindowRgn(self.hwnd, hrgn, False)
         except Exception:
             pass
 
         cy = h // 2
         if self.current_view == 'min':
-            if self.canvas.find_withtag('min_right'):
-                self.canvas.coords('min_right', w - 24, cy)
-            if self.canvas.find_withtag('min_left'):
-                self.canvas.coords('min_left', 36, cy)
-            if self.canvas.find_withtag('dot_img'):
-                self.canvas.coords('dot_img', 20 - 14, cy - 14)
+            if is_split:
+                gap = int(self.split_bubble_gap * self.split_morph_progress)
+                bw = int(self.split_bubble_w)
+                main_w = w - gap - bw
+                if self.canvas.find_withtag('min_right'):
+                    self.canvas.coords('min_right', main_w - 18, cy)
+                if self.canvas.find_withtag('min_left'):
+                    self.canvas.coords('min_left', 36, cy)
+                if self.canvas.find_withtag('dot_img'):
+                    self.canvas.coords('dot_img', 20 - 14, cy - 14)
+                if self.canvas.find_withtag('split_bubble_text'):
+                    self.canvas.coords('split_bubble_text', main_w + gap + (bw // 2), cy)
+            else:
+                if self.canvas.find_withtag('min_right'):
+                    self.canvas.coords('min_right', w - 24, cy)
+                if self.canvas.find_withtag('min_left'):
+                    self.canvas.coords('min_left', 36, cy)
+                if self.canvas.find_withtag('dot_img'):
+                    self.canvas.coords('dot_img', 20 - 14, cy - 14)
         elif self.current_view == 'normal':
             if self.canvas.find_withtag('norm_right'):
                 self.canvas.coords('norm_right', w - 22, 64)
@@ -1115,6 +1243,11 @@ class DynamicIslandHUD:
             tags='min_left'
         )
 
+        is_split = (self.split_morph_progress > 0.01)
+        gap = int(self.split_bubble_gap * self.split_morph_progress)
+        bw = int(self.split_bubble_w)
+        main_w = w - gap - bw if is_split else w
+
         is_flying_delta = (self.last_delta_time != 0) and ((time.time() - self.last_delta_time) < 1.8)
         if is_flying_delta:
             right_text = f"+{format_num(self.last_delta_tokens)} tok"
@@ -1136,13 +1269,27 @@ class DynamicIslandHUD:
             right_text = f"{tok_str} tok • {cost_str}"
             text_color = HEX_TEXT_PRIMARY
 
+        right_anchor_x = (main_w - 18) if is_split else (w - 24)
         self.canvas.create_text(
-            w - 24, cy, anchor='e',
+            right_anchor_x, cy, anchor='e',
             text=right_text,
             fill=text_color,
             font=(FONT_NAME, 9, 'bold'),
             tags='min_right'
         )
+
+        # If split is active, render detached activity bubble content (e.g. ⚡ 548)
+        if is_split and self.split_morph_progress > 0.3:
+            bubble_cx = main_w + gap + (bw // 2)
+            tps_val = getattr(self, 'latest_tps', 0.0) or 0.0
+            bubble_txt = f"{tps_val:.0f}" if tps_val > 0 else "⚡"
+            self.canvas.create_text(
+                bubble_cx, cy, anchor='center',
+                text=bubble_txt,
+                fill=HEX_ORANGE,
+                font=(FONT_NAME, 9, 'bold'),
+                tags='split_bubble_text'
+            )
 
     # --- VIEW: NORMAL ---
     def render_normal(self, w, h):
