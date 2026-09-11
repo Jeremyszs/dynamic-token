@@ -6,7 +6,6 @@ Item {
     anchors.fill: parent
 
     function dp(px) { return controller.scaler.dp(px); }
-    function sp(px) { return controller.scaler.sp(px); }
 
     readonly property int boxX1: root.dp(22)
     readonly property int boxW: width - (root.dp(22) * 2)
@@ -26,7 +25,7 @@ Item {
         text: "Token Usage & API Call History"
         color: "#FFFFFF"
         font.family: "SF Pro Display"
-        font.pixelSize: root.sp(14)
+        font.pointSize: 11
         font.bold: true
     }
 
@@ -81,7 +80,7 @@ Item {
         text: controller.latencySummaryStr
         color: "#A1A1A6"
         font.family: "SF Pro Display"
-        font.pixelSize: root.sp(10)
+        font.pointSize: 8
         font.bold: true
     }
 
@@ -102,32 +101,32 @@ Item {
         // Col 0: TOTAL TOKENS
         Item {
             x: root.dp(14); y: 0; width: statCard.colW; height: parent.height
-            Text { y: root.dp(18) - (implicitHeight / 2); text: "TOTAL TOKENS"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: root.sp(10); font.bold: true }
-            Text { y: root.dp(44) - (implicitHeight / 2); text: controller.totalTokensStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: root.sp(16); font.bold: true }
+            Text { y: root.dp(18) - (implicitHeight / 2); text: "TOTAL TOKENS"; color: "#58585E"; font.family: "SF Pro Display"; font.pointSize: 8; font.bold: true }
+            Text { y: root.dp(44) - (implicitHeight / 2); text: controller.totalTokensStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pointSize: 13; font.bold: true }
         }
         // Col 1: BURN COST
         Item {
             x: statCard.colW + root.dp(14); y: 0; width: statCard.colW; height: parent.height
-            Text { y: root.dp(18) - (implicitHeight / 2); text: "BURN COST"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: root.sp(10); font.bold: true }
-            Text { y: root.dp(44) - (implicitHeight / 2); text: controller.costStr; color: "#30D158"; font.family: "SF Pro Display"; font.pixelSize: root.sp(16); font.bold: true }
+            Text { y: root.dp(18) - (implicitHeight / 2); text: "BURN COST"; color: "#58585E"; font.family: "SF Pro Display"; font.pointSize: 8; font.bold: true }
+            Text { y: root.dp(44) - (implicitHeight / 2); text: controller.costStr; color: "#30D158"; font.family: "SF Pro Display"; font.pointSize: 13; font.bold: true }
         }
         // Col 2: REQUESTS
         Item {
             x: statCard.colW * 2 + root.dp(14); y: 0; width: statCard.colW; height: parent.height
-            Text { y: root.dp(18) - (implicitHeight / 2); text: "REQUESTS"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: root.sp(10); font.bold: true }
-            Text { y: root.dp(44) - (implicitHeight / 2); text: controller.requestsStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: root.sp(16); font.bold: true }
+            Text { y: root.dp(18) - (implicitHeight / 2); text: "REQUESTS"; color: "#58585E"; font.family: "SF Pro Display"; font.pointSize: 8; font.bold: true }
+            Text { y: root.dp(44) - (implicitHeight / 2); text: controller.requestsStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pointSize: 13; font.bold: true }
         }
         // Col 3: CACHE RATIO
         Item {
             x: statCard.colW * 3 + root.dp(14); y: 0; width: statCard.colW; height: parent.height
-            Text { y: root.dp(18) - (implicitHeight / 2); text: "CACHE RATIO"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: root.sp(10); font.bold: true }
-            Text { y: root.dp(44) - (implicitHeight / 2); text: controller.cacheRatioStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: root.sp(16); font.bold: true }
+            Text { y: root.dp(18) - (implicitHeight / 2); text: "CACHE RATIO"; color: "#58585E"; font.family: "SF Pro Display"; font.pointSize: 8; font.bold: true }
+            Text { y: root.dp(44) - (implicitHeight / 2); text: controller.cacheRatioStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pointSize: 13; font.bold: true }
         }
         // Col 4: THINKING
         Item {
             x: statCard.colW * 4 + root.dp(14); y: 0; width: statCard.colW; height: parent.height
-            Text { y: root.dp(18) - (implicitHeight / 2); text: "THINKING"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: root.sp(10); font.bold: true }
-            Text { y: root.dp(44) - (implicitHeight / 2); text: controller.reasoningTokensStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: root.sp(16); font.bold: true }
+            Text { y: root.dp(18) - (implicitHeight / 2); text: "THINKING"; color: "#58585E"; font.family: "SF Pro Display"; font.pointSize: 8; font.bold: true }
+            Text { y: root.dp(44) - (implicitHeight / 2); text: controller.reasoningTokensStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pointSize: 13; font.bold: true }
         }
     }
 
@@ -140,7 +139,7 @@ Item {
         text: "ACCOUNT MANAGER"
         color: "#58585E"
         font.family: "SF Pro Display"
-        font.pixelSize: root.sp(11)
+        font.pointSize: 9
         font.bold: true
     }
 
@@ -176,7 +175,7 @@ Item {
         text: root.provLabel
         color: "#FFFFFF"
         font.family: "SF Pro Display"
-        font.pixelSize: root.sp(10)
+        font.pointSize: 8
         font.bold: true
     }
 
@@ -231,7 +230,7 @@ Item {
             text: "SELECT ACCOUNT"
             color: "#58585E"
             font.family: "SF Pro Display"
-            font.pixelSize: root.sp(9)
+            font.pointSize: 7
             font.bold: true
         }
 
@@ -268,7 +267,7 @@ Item {
                         text: slotBtn.modelData.priority || (slotBtn.index + 1)
                         color: slotBtn.modelData.is_current ? "#30D158" : (slotBtn.modelData.is_active ? "#FFFFFF" : "#58585E")
                         font.family: "SF Pro Display"
-                        font.pixelSize: root.sp(10)
+                        font.pointSize: 8
                         font.bold: true
                     }
 
@@ -290,7 +289,7 @@ Item {
             text: controller.currentAccount.full_email || "No accounts registered"
             color: "#FFFFFF"
             font.family: "SF Pro Display"
-            font.pixelSize: root.sp(12)
+            font.pointSize: 10
             font.bold: true
             elide: Text.ElideRight
             width: poolCard.maxLeftW - statusBadge.width - root.dp(12)
@@ -313,7 +312,7 @@ Item {
                 text: "P" + (controller.currentAccount.priority || 1) + " • " + (controller.currentAccount.is_current ? "Active Route" : (controller.currentAccount.is_active ? "Standby Ready" : "Disabled"))
                 color: controller.currentAccount.is_current ? "#30D158" : (controller.currentAccount.is_active ? "#FFFFFF" : "#58585E")
                 font.family: "SF Pro Display"
-                font.pixelSize: root.sp(9)
+                font.pointSize: 7
                 font.bold: true
             }
         }
@@ -325,7 +324,7 @@ Item {
             text: controller.currentAccount.reset_time_left ? ("QUOTA  •  " + controller.currentAccount.reset_time_left) : "CURRENT QUOTA"
             color: "#58585E"
             font.family: "SF Pro Display"
-            font.pixelSize: root.sp(9)
+            font.pointSize: 7
             font.bold: true
         }
 
@@ -335,7 +334,7 @@ Item {
             text: (controller.currentAccount.used_str || "0") + " / " + (controller.currentAccount.limit_str || "0") + " (" + (controller.currentAccount.used_pct_str || "0.0%") + ")"
             color: (controller.currentAccount.used_pct >= 90) ? "#FF453A" : ((controller.currentAccount.used_pct >= 75) ? "#FF9F0A" : "#FFFFFF")
             font.family: "SF Pro Display"
-            font.pixelSize: root.sp(10)
+            font.pointSize: 8
             font.bold: true
         }
 
@@ -371,7 +370,7 @@ Item {
             text: (controller.timeline === 'today' ? "Today" : (controller.timeline === '7d' ? "7D" : (controller.timeline === '30d' ? "30D" : "All-Time"))) + " Burn: " + (controller.currentAccount.used_str || "0") + " tokens • " + (controller.currentAccount.reqs || 0) + " requests"
             color: "#A1A1A6"
             font.family: "SF Pro Display"
-            font.pixelSize: root.sp(10)
+            font.pointSize: 8
         }
 
         // Line 5: Action Button & Provider Total summary
@@ -398,7 +397,7 @@ Item {
             text: "Provider: " + (controller.currentProvider.active_count || 0) + "/" + (controller.currentProvider.total_count || 0) + " Active • " + controller.totalTokensStr + " tok"
             color: "#58585E"
             font.family: "SF Pro Display"
-            font.pixelSize: root.sp(10)
+            font.pointSize: 8
         }
     }
 
@@ -411,7 +410,7 @@ Item {
         text: "TOP MODELS BREAKDOWN"
         color: "#58585E"
         font.family: "SF Pro Display"
-        font.pixelSize: root.sp(11)
+        font.pointSize: 9
         font.bold: true
     }
 
@@ -434,7 +433,7 @@ Item {
                 text: modelRowItem.modelData.clean_name
                 color: "#FFFFFF"
                 font.family: "SF Pro Display"
-                font.pixelSize: root.sp(11)
+                font.pointSize: 9
                 elide: Text.ElideRight
                 width: root.width - root.dp(48) - modelTokensStat.implicitWidth - root.dp(16)
             }
@@ -447,7 +446,7 @@ Item {
                 text: modelRowItem.modelData.tokens_str
                 color: "#A1A1A6"
                 font.family: "SF Pro Display"
-                font.pixelSize: root.sp(10)
+                font.pointSize: 8
             }
 
             Rectangle {
@@ -481,7 +480,7 @@ Item {
         text: "LIVE API CALL HISTORY"
         color: "#58585E"
         font.family: "SF Pro Display"
-        font.pixelSize: root.sp(11)
+        font.pointSize: 9
         font.bold: true
     }
 
@@ -513,7 +512,7 @@ Item {
                     text: historyRowItem.modelData.status
                     color: historyRowItem.modelData.is_ok ? "#30D158" : "#FF453A"
                     font.family: "SF Pro Display"
-                    font.pixelSize: root.sp(9)
+                    font.pointSize: 7
                     font.bold: true
                 }
             }
@@ -524,7 +523,7 @@ Item {
                 text: historyRowItem.modelData.model
                 color: "#FFFFFF"
                 font.family: "SF Pro Display"
-                font.pixelSize: root.sp(11)
+                font.pointSize: 9
                 elide: Text.ElideRight
                 width: root.width - root.dp(86) - feedStatsStat.implicitWidth - root.dp(16)
             }
@@ -537,7 +536,7 @@ Item {
                 text: historyRowItem.modelData.stats_str
                 color: "#A1A1A6"
                 font.family: "SF Pro Display"
-                font.pixelSize: root.sp(11)
+                font.pointSize: 9
             }
         }
     }

@@ -22,10 +22,10 @@ Item {
         id: modelText
         x: root.dp(36)
         anchors.verticalCenter: parent.verticalCenter
-        text: controller.cleanLatestModel
+        text: controller.minShortModel
         color: "#9ca3af"
         font.family: "SF Pro Display"
-        font.pixelSize: root.sp(12)
+        font.pointSize: 9
         font.bold: true
         elide: Text.ElideRight
         width: metricsText.x - root.dp(36) - root.dp(12)
@@ -43,7 +43,7 @@ Item {
             return "#FFFFFF";
         }
         font.family: "SF Pro Display"
-        font.pixelSize: root.sp(12)
+        font.pointSize: 9
         font.bold: true
         text: {
             if (controller.flyingDeltaText !== "") {

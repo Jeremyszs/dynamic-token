@@ -67,5 +67,4 @@ def clean_model_display_name(m):
         parts = m.split('/')
         if len(parts[-1]) >= 3:
             m = parts[-1]
-    # Replicate exact Tkinter shortening for Min View
-    return m.replace('gemini-', '').replace('flash-', 'f').replace('thinking', 'thk')
+    return m

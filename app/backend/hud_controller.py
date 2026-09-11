@@ -198,6 +198,12 @@ class HUDController(QObject):
         return clean_model_display_name(self.stats.get('latest_model', '--'))
 
     @Property(str, notify=statsChanged)
+    def minShortModel(self):
+        raw_m = self.stats.get('latest_model', '--')
+        clean_m = clean_model_display_name(raw_m)
+        return clean_m.replace('gemini-', '').replace('flash-', 'f').replace('thinking', 'thk')
+
+    @Property(str, notify=statsChanged)
     def totalTokensStr(self):
         tot = self.stats.get('prompt', 0) + self.stats.get('completion', 0)
         return format_num(tot)
