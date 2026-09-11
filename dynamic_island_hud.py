@@ -70,7 +70,7 @@ PIL_RIM_GLOW_RGB = (48, 209, 88)
 VIEW_SPECS = {
     'min': (320, 42, 21),
     'normal': (520, 136, 26),
-    'detailed': (630, 456, 28)
+    'detailed': (630, 540, 28)
 }
 
 SWP_NOZORDER = 0x0004
@@ -168,8 +168,10 @@ class DynamicIslandHUD:
         self.hit_zones = []
         self.bg_photo = None
         self.card_photos = {}
+        self.icon_photos = {}
 
         self.init_antialiased_dots()
+        self.init_vector_icons()
 
         self._drag_start_x = 0
         self._drag_start_y = 0
@@ -200,9 +202,14 @@ class DynamicIslandHUD:
             'latest_model': '--',
             'latest_latency': None,
             'active_account': '--',
+            'active_account_full': '--',
+            'active_account_reqs': 0,
+            'active_account_toks': 0,
+            'active_account_priority': 1,
             'account_pool_active': 0,
             'account_pool_total': 0,
-            'active_pipeline': '--'
+            'account_list': [],
+            'active_pipeline': 'direct'
         }
         self.last_max_id = 0
 
@@ -247,6 +254,36 @@ class DynamicIslandHUD:
             d_act.ellipse([cx - (core_r + 1.5 * scale), cy - (core_r + 1.5 * scale), cx + (core_r + 1.5 * scale), cy + (core_r + 1.5 * scale)], fill=(31, 184, 78, 200))
             d_act.ellipse([cx - core_r, cy - core_r, cx + core_r, cy + core_r], fill=(52, 230, 98, 255))
             self.dot_active_frames.append(ImageTk.PhotoImage(im_act.resize((size, size), Image.Resampling.LANCZOS)))
+
+    def init_vector_icons(self):
+        # 1. User Icon (Smooth Antialiased Vector)
+        u_size = 14
+        u_scale = 4
+        u_s = u_size * u_scale
+        u_im = Image.new('RGBA', (u_s, u_s), (0, 0, 0, 0))
+        u_draw = ImageDraw.Draw(u_im)
+        u_cx = u_s / 2
+        u_head_r = 3.0 * u_scale
+        u_draw.ellipse([u_cx - u_head_r, 1.2 * u_scale, u_cx + u_head_r, 1.2 * u_scale + u_head_r * 2], fill=(152, 152, 157, 255))
+        u_draw.pieslice([1.2 * u_scale, 7.8 * u_scale, u_s - 1.2 * u_scale, u_s + 5.5 * u_scale], 180, 360, fill=(152, 152, 157, 255))
+        self.icon_photos['user'] = ImageTk.PhotoImage(u_im.resize((u_size, u_size), Image.Resampling.LANCZOS))
+
+        # 2. Lightning Bolt Icon (Vector)
+        b_size = 13
+        b_scale = 4
+        b_s = b_size * b_scale
+        b_im = Image.new('RGBA', (b_s, b_s), (0, 0, 0, 0))
+        b_draw = ImageDraw.Draw(b_im)
+        b_pts = [
+            (b_s * 0.58, 0),
+            (b_s * 0.18, b_s * 0.54),
+            (b_s * 0.48, b_s * 0.54),
+            (b_s * 0.40, b_s * 0.98),
+            (b_s * 0.82, b_s * 0.44),
+            (b_s * 0.52, b_s * 0.44),
+        ]
+        b_draw.polygon(b_pts, fill=(48, 209, 88, 255))
+        self.icon_photos['bolt'] = ImageTk.PhotoImage(b_im.resize((b_size, b_size), Image.Resampling.LANCZOS))
 
     def load_config(self):
         self.pos_x = None
@@ -430,6 +467,7 @@ class DynamicIslandHUD:
             cost = 0.0
             by_model = {}
 
+            today_acc_stats = {}
             for r in rows:
                 try:
                     d = json.loads(r[1])
@@ -447,6 +485,11 @@ class DynamicIslandHUD:
                         by_model[clean]['completion'] += mstat.get('completionTokens', 0)
                         by_model[clean]['cached'] += mstat.get('cachedTokens', 0)
                         by_model[clean]['cost'] += mstat.get('cost', 0.0)
+                    for acc_id, a_stat in d.get('byAccount', {}).items():
+                        if acc_id not in today_acc_stats:
+                            today_acc_stats[acc_id] = {'requests': 0, 'promptTokens': 0}
+                        today_acc_stats[acc_id]['requests'] += a_stat.get('requests', 0)
+                        today_acc_stats[acc_id]['promptTokens'] += a_stat.get('promptTokens', 0)
                 except Exception:
                     pass
 
@@ -456,19 +499,17 @@ class DynamicIslandHUD:
 
             latest_m = recent_rows[0][3] if recent_rows else '--'
 
-            # 1. Fetch Latency & Thinking Tokens from requestDetails
+            # 1. Latency & Reasoning Tokens
             latest_latency = None
             tot_reasoning = 0
             latest_conn_id = None
             try:
-                # Query recent requestDetails
                 req_details_row = cur.execute('SELECT data FROM requestDetails ORDER BY id DESC LIMIT 1').fetchone()
                 if req_details_row:
                     rd = json.loads(req_details_row[0])
-                    latest_latency = rd.get('latency', {}) # {'ttft': ms, 'total': ms}
+                    latest_latency = rd.get('latency', {})
                     latest_conn_id = rd.get('connectionId')
 
-                # Sum reasoning tokens
                 time_filter = today_str if self.timeline == 'today' else (datetime.date.today() - datetime.timedelta(days=7)).isoformat()
                 for r in cur.execute('SELECT data FROM requestDetails WHERE timestamp >= ?', (time_filter,)).fetchall():
                     try:
@@ -479,28 +520,48 @@ class DynamicIslandHUD:
             except Exception:
                 pass
 
-            # 2. Account Pool & Active Account Mapping
+            # 2. Full Multi-Account Pool Health Breakdown
+            account_list = []
             active_acc_name = '--'
+            active_acc_full = '--'
+            active_acc_priority = 1
+            active_acc_reqs = 0
+            active_acc_toks = 0
             active_count = 0
             total_count = 0
-            try:
-                for r in cur.execute('SELECT id, name, email, priority, isActive FROM providerConnections WHERE provider="antigravity"').fetchall():
-                    total_count += 1
-                    if r[4]: active_count += 1
-                    if latest_conn_id and r[0] == latest_conn_id:
-                        email_or_name = r[2] or r[1] or '--'
-                        active_acc_name = email_or_name.split('@')[0]
-                if active_acc_name == '--' and recent_rows:
-                    active_acc_name = 'antigravity'
-            except Exception:
-                pass
 
-            # 3. Combo / Pipeline detection
-            active_pipeline = 'direct'
             try:
-                combo_row = cur.execute('SELECT name FROM combos WHERE models LIKE ? LIMIT 1', (f'%{latest_m}%',)).fetchone()
-                if combo_row:
-                    active_pipeline = combo_row[0]
+                for r in cur.execute('SELECT id, provider, name, email, priority, isActive, data FROM providerConnections WHERE provider="antigravity" ORDER BY priority ASC').fetchall():
+                    total_count += 1
+                    is_active = bool(r[5])
+                    if is_active:
+                        active_count += 1
+                    
+                    full_email = r[3] or r[2] or '--'
+                    short_user = full_email.split('@')[0]
+                    astats = today_acc_stats.get(r[0], {})
+                    a_reqs = astats.get('requests', 0)
+                    a_toks = astats.get('promptTokens', 0)
+
+                    # Check if currently active connection
+                    is_current = (latest_conn_id and r[0] == latest_conn_id)
+                    if is_current or (active_acc_name == '--' and is_active):
+                        active_acc_name = short_user
+                        active_acc_full = full_email
+                        active_acc_priority = r[4]
+                        active_acc_reqs = a_reqs
+                        active_acc_toks = a_toks
+
+                    account_list.append({
+                        'id': r[0],
+                        'short_user': short_user,
+                        'full_email': full_email,
+                        'priority': r[4],
+                        'is_active': is_active,
+                        'is_current': is_current,
+                        'reqs': a_reqs,
+                        'toks': a_toks
+                    })
             except Exception:
                 pass
 
@@ -516,9 +577,13 @@ class DynamicIslandHUD:
                 'latest_model': latest_m,
                 'latest_latency': latest_latency,
                 'active_account': active_acc_name,
+                'active_account_full': active_acc_full,
+                'active_account_priority': active_acc_priority,
+                'active_account_reqs': active_acc_reqs,
+                'active_account_toks': active_acc_toks,
                 'account_pool_active': active_count,
                 'account_pool_total': total_count,
-                'active_pipeline': active_pipeline
+                'account_list': account_list
             }
             con.close()
             self.is_dirty = True
@@ -603,7 +668,7 @@ class DynamicIslandHUD:
         border_col = PIL_BORDER_HOVER if self.is_hovered else PIL_BORDER
         draw.rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, outline=border_col, width=1)
 
-        # 3. Indicator 2: Specular Perimeter Rim Glow (Siri/AirDrop neon beam)
+        # 3. Specular Perimeter Rim Glow (Siri/AirDrop neon beam)
         time_since_call = time.time() - self.last_activity_time
         if time_since_call < 2.5:
             intensity = max(0.0, 1.0 - (time_since_call / 2.5))
@@ -701,8 +766,10 @@ class DynamicIslandHUD:
 
         is_flying_delta = (self.last_delta_time != 0) and ((time.time() - self.last_delta_time) < 1.8)
         if is_flying_delta:
-            right_text = f"+{format_num(self.last_delta_tokens)} tok ⚡"
+            right_text = f"+{format_num(self.last_delta_tokens)} tok"
             text_color = HEX_GREEN
+            # Place small vector lightning bolt next to delta
+            self.canvas.create_image(w - 24 - 72, cy - 6, anchor='nw', image=self.icon_photos['bolt'])
         else:
             tot_tok = self.stats['prompt'] + self.stats['completion']
             tok_str = format_num(tot_tok)
@@ -745,8 +812,9 @@ class DynamicIslandHUD:
 
         is_flying_delta = (self.last_delta_time != 0) and ((time.time() - self.last_delta_time) < 1.8)
         if is_flying_delta:
-            norm_right_text = f"+{format_num(self.last_delta_tokens)} tok ⚡"
+            norm_right_text = f"+{format_num(self.last_delta_tokens)} tok"
             norm_color = HEX_GREEN
+            self.canvas.create_image(w - 22 - 76, 64 - 6, anchor='nw', image=self.icon_photos['bolt'])
         else:
             norm_right_text = f"${cost:.2f}  |  {format_num(reqs)} reqs"
             norm_color = HEX_BLUE
@@ -767,7 +835,7 @@ class DynamicIslandHUD:
             if self.stats.get('latest_latency'):
                 tot_ms = self.stats['latest_latency'].get('total', 0)
                 if tot_ms > 0:
-                    lat_info = f" • ⚡{tot_ms / 1000.0:.1f}s"
+                    lat_info = f" • {tot_ms / 1000.0:.1f}s"
             ticker_txt = f"Last: {t_ago} • {last_call[3]} • +{format_num(last_call[4] + last_call[5])} tok{lat_info}"
         else:
             ticker_txt = "Listening for API calls..."
@@ -782,7 +850,7 @@ class DynamicIslandHUD:
 
         self.canvas.create_text(
             w - 22, 104, anchor='e',
-            text='▾ Full',
+            text='Full',
             fill=HEX_TEXT_MUTED,
             font=(FONT_NAME, 9, 'bold'),
             tags='norm_expand'
@@ -792,7 +860,7 @@ class DynamicIslandHUD:
     def render_detailed(self, w, h):
         self.place_dot(24, 26)
 
-        # Header Title with Live Routing Pipeline & Account Pool Pills
+        # Header Title
         self.canvas.create_text(
             44, 26, anchor='w',
             text='Token Usage & API Call History',
@@ -800,24 +868,14 @@ class DynamicIslandHUD:
             font=(FONT_NAME, 11, 'bold')
         )
 
-        # Account Pool Badge: e.g. "👤 meowmrongg • Pool 5/8"
-        acc_str = f"👤 {self.stats['active_account']} • {self.stats['account_pool_active']}/{self.stats['account_pool_total']}"
-        self.canvas.create_text(
-            w - 180, 26, anchor='e',
-            text=acc_str,
-            fill=HEX_TEXT_SECONDARY,
-            font=(FONT_NAME, 8, 'bold')
-        )
-
-        # Header Action Buttons: Minimize and Shutdown
+        # Header Controls: Minimize and Shutdown
         self.draw_circle_button(w - 62, 26, r=12, text='—', callback=lambda: self.set_view('min'))
-        self.draw_circle_button(w - 32, 26, r=12, text='✕', callback=self.shutdown, bg='#301214', fg='#FF453A', border='#5A1E22')
+        self.draw_circle_button(w - 32, 26, r=12, text='X', callback=self.shutdown, bg='#301214', fg='#FF453A', border='#5A1E22')
 
-        # Timeline Tabs Row (Left) + Latency Tracker Pill (Right)
+        # Timeline Selector (Left) + Latency Pill (Right)
         self.render_timeline_tabs(24, 60, anchor='w')
 
-        # Latency / TTFT Tracker Pill (Top Right of Timeline row)
-        lat_txt = "⚡ -- ms"
+        lat_txt = "-- ms"
         lat_color = HEX_GREEN
         if self.stats.get('latest_latency'):
             tot_ms = self.stats['latest_latency'].get('total', 0)
@@ -825,8 +883,10 @@ class DynamicIslandHUD:
             if tot_ms > 8000:
                 lat_color = HEX_ORANGE
             if tot_ms > 0:
-                lat_txt = f"⚡ {tot_ms / 1000.0:.2f}s (TTFT {ttft_ms}ms)"
+                lat_txt = f"{tot_ms / 1000.0:.2f}s (TTFT {ttft_ms}ms)"
 
+        # Place bolt icon before latency text
+        self.canvas.create_image(w - 24 - 110, 60 - 6, anchor='nw', image=self.icon_photos['bolt'])
         self.canvas.create_text(
             w - 24, 60, anchor='e',
             text=lat_txt,
@@ -834,7 +894,7 @@ class DynamicIslandHUD:
             font=(FONT_NAME, 8, 'bold')
         )
 
-        # 5-Column Metric Card: Tokens, Cost, Requests, Cache Ratio, Thinking Tokens
+        # 1. PRIMARY METRICS CARD (5 Columns)
         tot_tok = self.stats['prompt'] + self.stats['completion']
         prompt_tok = self.stats['prompt']
         cached_tok = self.stats['cached']
@@ -844,7 +904,7 @@ class DynamicIslandHUD:
         cache_pct = (cached_tok / prompt_tok * 100) if prompt_tok > 0 else 0.0
 
         box_x1, box_y1 = 22, 82
-        box_w, box_h = w - 44, 72
+        box_w, box_h = w - 44, 70
 
         card_img = Image.new('RGBA', (box_w, box_h), (1, 1, 1, 0))
         cdraw = ImageDraw.Draw(card_img)
@@ -855,31 +915,81 @@ class DynamicIslandHUD:
         col_w = box_w // 5
 
         # Col 1: Total Tokens
-        self.canvas.create_text(box_x1 + 14, box_y1 + 22, anchor='w', text='TOTAL TOKENS', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
-        self.canvas.create_text(box_x1 + 14, box_y1 + 48, anchor='w', text=format_num(tot_tok), fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 13, 'bold'))
+        self.canvas.create_text(box_x1 + 14, box_y1 + 20, anchor='w', text='TOTAL TOKENS', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
+        self.canvas.create_text(box_x1 + 14, box_y1 + 46, anchor='w', text=format_num(tot_tok), fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 13, 'bold'))
 
         # Col 2: Cost
-        self.canvas.create_text(box_x1 + col_w + 14, box_y1 + 22, anchor='w', text='BURN COST', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
-        self.canvas.create_text(box_x1 + col_w + 14, box_y1 + 48, anchor='w', text=f"${cost:.2f}", fill=HEX_GREEN, font=(FONT_NAME, 13, 'bold'))
+        self.canvas.create_text(box_x1 + col_w + 14, box_y1 + 20, anchor='w', text='BURN COST', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
+        self.canvas.create_text(box_x1 + col_w + 14, box_y1 + 46, anchor='w', text=f"${cost:.2f}", fill=HEX_GREEN, font=(FONT_NAME, 13, 'bold'))
 
         # Col 3: Requests
-        self.canvas.create_text(box_x1 + col_w * 2 + 14, box_y1 + 22, anchor='w', text='REQUESTS', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
-        self.canvas.create_text(box_x1 + col_w * 2 + 14, box_y1 + 48, anchor='w', text=format_num(reqs), fill=HEX_BLUE, font=(FONT_NAME, 13, 'bold'))
+        self.canvas.create_text(box_x1 + col_w * 2 + 14, box_y1 + 20, anchor='w', text='REQUESTS', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
+        self.canvas.create_text(box_x1 + col_w * 2 + 14, box_y1 + 46, anchor='w', text=format_num(reqs), fill=HEX_BLUE, font=(FONT_NAME, 13, 'bold'))
 
         # Col 4: Cache Ratio
-        self.canvas.create_text(box_x1 + col_w * 3 + 14, box_y1 + 22, anchor='w', text='CACHE RATIO', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
-        self.canvas.create_text(box_x1 + col_w * 3 + 14, box_y1 + 48, anchor='w', text=f"{cache_pct:.1f}%", fill=HEX_ORANGE, font=(FONT_NAME, 13, 'bold'))
+        self.canvas.create_text(box_x1 + col_w * 3 + 14, box_y1 + 20, anchor='w', text='CACHE RATIO', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
+        self.canvas.create_text(box_x1 + col_w * 3 + 14, box_y1 + 46, anchor='w', text=f"{cache_pct:.1f}%", fill=HEX_ORANGE, font=(FONT_NAME, 13, 'bold'))
 
-        # Col 5: Thinking / Reasoning Tokens
-        self.canvas.create_text(box_x1 + col_w * 4 + 14, box_y1 + 22, anchor='w', text='THINKING', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
-        self.canvas.create_text(box_x1 + col_w * 4 + 14, box_y1 + 48, anchor='w', text=format_num(reasoning_tok), fill=HEX_PURPLE, font=(FONT_NAME, 13, 'bold'))
+        # Col 5: Thinking Tokens
+        self.canvas.create_text(box_x1 + col_w * 4 + 14, box_y1 + 20, anchor='w', text='THINKING', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
+        self.canvas.create_text(box_x1 + col_w * 4 + 14, box_y1 + 46, anchor='w', text=format_num(reasoning_tok), fill=HEX_PURPLE, font=(FONT_NAME, 13, 'bold'))
 
-        # Top Models Breakdown
-        self.canvas.create_text(24, 178, anchor='w', text='TOP MODELS BREAKDOWN', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
+        # 2. DEDICATED SECTION: ACCOUNT POOL & FAILOVER HEALTH
+        pool_y = 168
+        self.canvas.create_text(24, pool_y, anchor='w', text='ACCOUNT POOL & FAILOVER HEALTH', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
+
+        # Pool count pill on right: e.g. "5/8 ACTIVE"
+        pool_str = f"{self.stats['account_pool_active']}/{self.stats['account_pool_total']} ACTIVE"
+        self.canvas.create_text(w - 24, pool_y, anchor='e', text=pool_str, fill=HEX_GREEN, font=(FONT_NAME, 8, 'bold'))
+
+        pool_box_y = pool_y + 12
+        pool_box_h = 76
+
+        pool_img = Image.new('RGBA', (box_w, pool_box_h), (1, 1, 1, 0))
+        p_draw = ImageDraw.Draw(pool_img)
+        p_draw.rounded_rectangle([0, 0, box_w - 1, pool_box_h - 1], radius=16, fill=PIL_CARD_BG, outline=PIL_CARD_BORDER, width=1)
+        self.card_photos['pool_card'] = ImageTk.PhotoImage(pool_img)
+        self.canvas.create_image(box_x1, pool_box_y, anchor='nw', image=self.card_photos['pool_card'])
+
+        # Left side: Active Account Spotlight
+        self.canvas.create_image(box_x1 + 14, pool_box_y + 15, anchor='nw', image=self.icon_photos['user'])
+        self.canvas.create_text(
+            box_x1 + 34, pool_box_y + 22, anchor='w',
+            text=self.stats['active_account_full'],
+            fill=HEX_TEXT_PRIMARY,
+            font=(FONT_NAME, 10, 'bold')
+        )
+        sub_acc = f"Priority {self.stats['active_account_priority']} Active Route • Today: {format_num(self.stats['active_account_toks'])} tok ({self.stats['active_account_reqs']} reqs)"
+        self.canvas.create_text(
+            box_x1 + 14, pool_box_y + 44, anchor='w',
+            text=sub_acc,
+            fill=HEX_TEXT_SECONDARY,
+            font=(FONT_NAME, 8)
+        )
+
+        # Right side: Multi-Account Chain Dots / Badges
+        chain_x_start = box_x1 + box_w - 200
+        self.canvas.create_text(chain_x_start, pool_box_y + 20, anchor='w', text='FAILOVER POOL', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 7, 'bold'))
+
+        # Draw 8 priority slots horizontally
+        slot_x = chain_x_start
+        for acc in self.stats.get('account_list', [])[:8]:
+            p_num = acc['priority']
+            is_on = acc['is_active']
+            is_curr = acc['is_current']
+
+            dot_fill = HEX_GREEN if is_curr else (HEX_BLUE if is_on else '#2C2C2E')
+            self.canvas.create_rectangle(slot_x, pool_box_y + 36, slot_x + 18, pool_box_y + 54, fill=dot_fill, outline=HEX_BORDER, width=1)
+            self.canvas.create_text(slot_x + 9, pool_box_y + 45, text=str(p_num), fill='#000000' if (is_curr or is_on) else HEX_TEXT_MUTED, font=(FONT_NAME, 7, 'bold'))
+            slot_x += 24
+
+        # 3. TOP MODELS BREAKDOWN
+        models_y = pool_box_y + pool_box_h + 16
+        self.canvas.create_text(24, models_y, anchor='w', text='TOP MODELS BREAKDOWN', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
 
         sorted_models = sorted(self.stats['models'].items(), key=lambda item: item[1]['prompt'], reverse=True)[:3]
 
-        bar_y = 202
+        bar_y = models_y + 20
         for m_name, mdata in sorted_models:
             p_val = mdata['prompt'] + mdata['completion']
             r_val = mdata['requests']
@@ -891,15 +1001,14 @@ class DynamicIslandHUD:
             bar_w_max = w - 48
             self.canvas.create_rectangle(24, bar_y + 9, 24 + bar_w_max, bar_y + 14, fill='#1C1C1E', outline='')
             self.canvas.create_rectangle(24, bar_y + 9, 24 + int(bar_w_max * ratio), bar_y + 14, fill=HEX_BLUE, outline='')
-            bar_y += 30
+            bar_y += 28
 
-        # Live Feed Section (with Latency Badge)
-        feed_header_y = bar_y + 10
+        # 4. LIVE API CALL HISTORY
+        feed_header_y = bar_y + 12
         self.canvas.create_text(24, feed_header_y, anchor='w', text='LIVE API CALL HISTORY', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
 
-        feed_y = feed_header_y + 24
+        feed_y = feed_header_y + 22
         for row in self.stats['recent'][:3]:
-            # (id, timestamp, provider, model, promptTokens, completionTokens, cost, status)
             t_ago = format_time_ago(row[1])
             m_tag = row[3]
             toks = row[4] + row[5]
@@ -910,7 +1019,7 @@ class DynamicIslandHUD:
 
             self.canvas.create_text(82, feed_y + 7, anchor='w', text=f"{m_tag}", fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 9))
             self.canvas.create_text(w - 24, feed_y + 7, anchor='e', text=f"+{format_num(toks)} tok • {t_ago}", fill=HEX_TEXT_SECONDARY, font=(FONT_NAME, 9))
-            feed_y += 26
+            feed_y += 24
 
     def render_timeline_tabs(self, x, y, anchor='e'):
         tabs = [('today', 'Today'), ('7d', '7D'), ('30d', '30D'), ('all', 'All')]
