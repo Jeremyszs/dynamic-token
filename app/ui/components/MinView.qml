@@ -5,37 +5,34 @@ Item {
     id: root
     anchors.fill: parent
 
-    // Status Dot on Left
+    // In Tkinter: cy = h // 2; dot at (20, cy); dot img is 28x28 centered at 20 => cx=20, cy=21
     StatusDot {
         id: statusDot
-        anchors.left: parent.left
-        anchors.leftMargin: 10
+        x: 10
         anchors.verticalCenter: parent.verticalCenter
         active: controller.isActivityActive
         error: controller.isActivityError
     }
 
-    // Model Name
+    // In Tkinter: text at (36, cy), anchor='w', font=(FONT_NAME, 9, 'bold'), HEX_TEXT_SECONDARY (#A1A1A6)
     Text {
         id: modelText
-        anchors.left: statusDot.right
-        anchors.leftMargin: 6
+        x: 36
         anchors.verticalCenter: parent.verticalCenter
-        anchors.right: metricsText.left
-        anchors.rightMargin: 8
         text: controller.cleanLatestModel
         color: "#A1A1A6"
         font.family: "SF Pro Display"
-        font.pixelSize: 10
+        font.pixelSize: 9
         font.bold: true
         elide: Text.ElideRight
+        width: metricsText.x - 36 - 12
     }
 
-    // Right-hand Metrics / Hover Peek / Flying delta
+    // In Tkinter: text at (w - 24, cy), anchor='e', font=(FONT_NAME, 9, 'bold')
     Text {
         id: metricsText
         anchors.right: parent.right
-        anchors.rightMargin: 12
+        anchors.rightMargin: 24
         anchors.verticalCenter: parent.verticalCenter
         color: {
             if (controller.flyingDeltaText !== "") return "#30D158";
@@ -43,7 +40,7 @@ Item {
             return "#FFFFFF";
         }
         font.family: "SF Pro Display"
-        font.pixelSize: 10
+        font.pixelSize: 9
         font.bold: true
         text: {
             if (controller.flyingDeltaText !== "") {

@@ -1,94 +1,85 @@
 import QtQuick
-import QtQuick.Layouts
 import "."
 
 Item {
     id: root
     anchors.fill: parent
 
-    // 1. Header (y=12)
-    Row {
-        id: headerRow
-        anchors.left: parent.left
-        anchors.leftMargin: 12
-        anchors.top: parent.top
-        anchors.topMargin: 10
-        spacing: 6
-        height: 20
+    // Tkinter constants: box_x1 = 22, box_w = w - 44
+    readonly property int boxX1: 22
+    readonly property int boxW: width - 44
 
-        StatusDot {
-            anchors.verticalCenter: parent.verticalCenter
-            active: controller.isActivityActive
-            error: controller.isActivityError
-        }
+    // 1. Header (y=24)
+    // place_dot(24, 24)
+    StatusDot {
+        id: statusDot
+        x: 14
+        y: 14
+        active: controller.isActivityActive
+        error: controller.isActivityError
+    }
 
-        Text {
-            anchors.verticalCenter: parent.verticalCenter
-            text: "Token Usage & API Call History"
-            color: "#FFFFFF"
-            font.family: "SF Pro Display"
-            font.pixelSize: 11
-            font.bold: true
+    // create_text(44, 24, anchor='w', text='Token Usage & API Call History', font=(FONT_NAME, 11, 'bold'))
+    Text {
+        x: 44
+        y: 24 - (implicitHeight / 2)
+        text: "Token Usage & API Call History"
+        color: "#FFFFFF"
+        font.family: "SF Pro Display"
+        font.pixelSize: 11
+        font.bold: true
+    }
+
+    // Header Controls at y=24: 9R at w - 92, minimize at w - 62, close at w - 32
+    CircleButton {
+        x: root.width - 92 - 12
+        y: 24 - 12
+        buttonText: "9R"
+        normalColor: controller.is9routerRunning ? "#381C08" : "#281506"
+        borderColor: controller.is9routerRunning ? "#8A420A" : "#542605"
+        iconColor: "#FF9F0A"
+        radiusSize: 12
+        onClicked: controller.run9routerAction()
+    }
+
+    CircleButton {
+        x: root.width - 62 - 12
+        y: 24 - 12
+        iconType: "minimize"
+        normalColor: "#1C1C1E"
+        borderColor: "#262629"
+        iconColor: "#FFFFFF"
+        radiusSize: 12
+        onClicked: controller.setView("min")
+    }
+
+    CircleButton {
+        x: root.width - 32 - 12
+        y: 24 - 12
+        iconType: "close"
+        normalColor: "#241416"
+        borderColor: "#4A1E22"
+        iconColor: "#FF453A"
+        radiusSize: 12
+        onClicked: Qt.quit()
+    }
+
+    // Row 2 (y=54): Timeline Tabs & Latency Metric
+    // render_timeline_tabs(24, 54, anchor='w')
+    TimelineTabs {
+        x: 24
+        y: 54 - 10
+        currentTimeline: controller.timeline
+        onTimelineSelected: function(key) {
+            controller.setTimeline(key);
         }
     }
 
-    // Header buttons (9R, minimize, close)
-    Row {
-        id: headerControls
-        anchors.right: parent.right
-        anchors.rightMargin: 12
-        anchors.verticalCenter: headerRow.verticalCenter
-        spacing: 6
-
-        CircleButton {
-            buttonText: "9R"
-            normalColor: controller.is9routerRunning ? "#381C08" : "#281506"
-            borderColor: controller.is9routerRunning ? "#8A420A" : "#542605"
-            iconColor: "#FF9F0A"
-            radiusSize: 10
-            onClicked: controller.run9routerAction()
-        }
-
-        CircleButton {
-            iconType: "minimize"
-            normalColor: "#1C1C1E"
-            borderColor: "#262629"
-            iconColor: "#FFFFFF"
-            radiusSize: 10
-            onClicked: controller.setView("min")
-        }
-
-        CircleButton {
-            iconType: "close"
-            normalColor: "#241416"
-            borderColor: "#4A1E22"
-            iconColor: "#FF453A"
-            radiusSize: 10
-            onClicked: Qt.quit()
-        }
-    }
-
-    // Row 2: Timeline Tabs on left & Latency telemetry on right
-    Row {
-        id: timelineRow
-        anchors.left: parent.left
-        anchors.leftMargin: 12
-        anchors.top: headerRow.bottom
-        anchors.topMargin: 6
-        height: 20
-
-        TimelineTabs {
-            currentTimeline: controller.timeline
-            onTimelineSelected: function(key) {
-                controller.setTimeline(key);
-            }
-        }
-    }
-
+    // create_text(w - 24, 54, anchor='e', text=lat_txt, font=(FONT_NAME, 8, 'bold'))
     Text {
         anchors.right: parent.right
-        anchors.rightMargin: 12
-        anchors.verticalCenter: timelineRow.verticalCenter
+        anchors.rightMargin: 24
+        y: 54 - (implicitHeight / 2)
         text: controller.latencySummaryStr
         color: "#A1A1A6"
         font.family: "SF Pro Display"
@@ -96,545 +87,464 @@ Item {
         font.bold: true
     }
 
-    // 2. Primary Metrics Card
+    // 2. PRIMARY METRICS CARD (y=74, h=66, box_x1=22, box_w=w-44)
     Rectangle {
         id: statCard
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: 12
-        anchors.rightMargin: 12
-        anchors.top: timelineRow.bottom
-        anchors.topMargin: 6
-        height: 48
-        radius: 10
+        x: root.boxX1
+        y: 74
+        width: root.boxW
+        height: 66
+        radius: 16
         color: "#121214"
         border.color: "#262629"
         border.width: 1
 
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 12
-            anchors.rightMargin: 12
+        readonly property int colW: width / 5
 
-            Column {
-                Layout.fillWidth: true
-                spacing: 1
-                Text { text: "TOTAL TOKENS"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 7; font.bold: true }
-                Text { text: controller.totalTokensStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: 12; font.bold: true }
-            }
-            Column {
-                Layout.fillWidth: true
-                spacing: 1
-                Text { text: "BURN COST"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 7; font.bold: true }
-                Text { text: controller.costStr; color: "#30D158"; font.family: "SF Pro Display"; font.pixelSize: 12; font.bold: true }
-            }
-            Column {
-                Layout.fillWidth: true
-                spacing: 1
-                Text { text: "REQUESTS"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 7; font.bold: true }
-                Text { text: controller.requestsStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: 12; font.bold: true }
-            }
-            Column {
-                Layout.fillWidth: true
-                spacing: 1
-                Text { text: "CACHE RATIO"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 7; font.bold: true }
-                Text { text: controller.cacheRatioStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: 12; font.bold: true }
-            }
-            Column {
-                Layout.fillWidth: true
-                spacing: 1
-                Text { text: "THINKING"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 7; font.bold: true }
-                Text { text: controller.reasoningTokensStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: 12; font.bold: true }
-            }
+        // Col 0: TOTAL TOKENS
+        Item {
+            x: 14; y: 0; width: statCard.colW; height: 66
+            Text { y: 18 - (implicitHeight / 2); text: "TOTAL TOKENS"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 8; font.bold: true }
+            Text { y: 44 - (implicitHeight / 2); text: controller.totalTokensStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: 13; font.bold: true }
+        }
+        // Col 1: BURN COST
+        Item {
+            x: statCard.colW + 14; y: 0; width: statCard.colW; height: 66
+            Text { y: 18 - (implicitHeight / 2); text: "BURN COST"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 8; font.bold: true }
+            Text { y: 44 - (implicitHeight / 2); text: controller.costStr; color: "#30D158"; font.family: "SF Pro Display"; font.pixelSize: 13; font.bold: true }
+        }
+        // Col 2: REQUESTS
+        Item {
+            x: statCard.colW * 2 + 14; y: 0; width: statCard.colW; height: 66
+            Text { y: 18 - (implicitHeight / 2); text: "REQUESTS"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 8; font.bold: true }
+            Text { y: 44 - (implicitHeight / 2); text: controller.requestsStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: 13; font.bold: true }
+        }
+        // Col 3: CACHE RATIO
+        Item {
+            x: statCard.colW * 3 + 14; y: 0; width: statCard.colW; height: 66
+            Text { y: 18 - (implicitHeight / 2); text: "CACHE RATIO"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 8; font.bold: true }
+            Text { y: 44 - (implicitHeight / 2); text: controller.cacheRatioStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: 13; font.bold: true }
+        }
+        // Col 4: THINKING
+        Item {
+            x: statCard.colW * 4 + 14; y: 0; width: statCard.colW; height: 66
+            Text { y: 18 - (implicitHeight / 2); text: "THINKING"; color: "#58585E"; font.family: "SF Pro Display"; font.pixelSize: 8; font.bold: true }
+            Text { y: 44 - (implicitHeight / 2); text: controller.reasoningTokensStr; color: "#FFFFFF"; font.family: "SF Pro Display"; font.pixelSize: 13; font.bold: true }
         }
     }
 
-    // 3. Section: Account Manager
-    Item {
-        id: accountManagerSection
-        anchors.left: parent.left
+    // 3. DEDICATED SECTION: ACCOUNT MANAGER (y=154, h=120)
+    readonly property int poolHeaderY: 154
+
+    // Title at (24, pool_header_y)
+    Text {
+        x: 24
+        y: root.poolHeaderY - (implicitHeight / 2)
+        text: "ACCOUNT MANAGER"
+        color: "#58585E"
+        font.family: "SF Pro Display"
+        font.pixelSize: 9
+        font.bold: true
+    }
+
+    // Refresh button at (x1=182, y1=pool_header_y - 10, x2=256, y2=pool_header_y + 10)
+    PillButton {
+        x: 182
+        y: root.poolHeaderY - 10
+        width: 74
+        height: 20
+        buttonRadius: 8
+        text: "Refresh"
+        normalColor: "#1C1C1F"
+        textColor: "#A1A1A6"
+        borderColor: "#333338"
+        onClicked: controller.triggerRefresh()
+    }
+
+    // Provider Level Navigation & Disable All
+    // In Tkinter: car_x = w - 24; [›] at car_x - 12; label at car_x - 32; [‹] at car_x - 32 - prov_lbl_len; Disable All at left
+    readonly property string provLabel: controller.currentProvider.clean_name + " (" + (controller.selectedProviderIndex + 1) + "/" + controller.providersList.length + ")"
+    readonly property int provLblLen: provLabel.length * 6 + 18
+
+    CircleButton {
+        x: root.width - 24 - 12 - 10
+        y: root.poolHeaderY - 10
+        radiusSize: 10
+        iconType: "right"
+        onClicked: controller.nextProvider()
+    }
+
+    Text {
         anchors.right: parent.right
-        anchors.leftMargin: 12
-        anchors.rightMargin: 12
-        anchors.top: statCard.bottom
-        anchors.topMargin: 8
-        height: 128
+        anchors.rightMargin: 24 + 32
+        y: root.poolHeaderY - (implicitHeight / 2)
+        text: root.provLabel
+        color: "#FFFFFF"
+        font.family: "SF Pro Display"
+        font.pixelSize: 8
+        font.bold: true
+    }
 
-        // Section Header Row
-        Item {
-            id: amHeader
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            height: 20
+    CircleButton {
+        anchors.right: parent.right
+        anchors.rightMargin: 24 + 32 + root.provLblLen
+        y: root.poolHeaderY - 10
+        radiusSize: 10
+        iconType: "left"
+        onClicked: controller.prevProvider()
+    }
 
-            Row {
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 10
+    PillButton {
+        anchors.right: parent.right
+        anchors.rightMargin: 24 + 32 + root.provLblLen + 14
+        y: root.poolHeaderY - 10
+        width: 72
+        height: 20
+        buttonRadius: 8
+        text: (controller.currentProvider.active_count > 0) ? "Disable All" : "Enable All"
+        textColor: (controller.currentProvider.active_count > 0) ? "#A1A1A6" : "#30D158"
+        normalColor: "#1C1C1F"
+        borderColor: "#333338"
+        onClicked: {
+            controller.toggleProviderActive(
+                controller.currentProvider.raw_name,
+                controller.currentProvider.active_count > 0
+            );
+        }
+    }
 
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "ACCOUNT MANAGER"
-                    color: "#58585E"
-                    font.family: "SF Pro Display"
-                    font.pixelSize: 8
-                    font.bold: true
-                }
+    // Account Manager Card Container (y = pool_header_y + 14 = 168, h = 120)
+    Rectangle {
+        id: poolCard
+        x: root.boxX1
+        y: root.poolHeaderY + 14
+        width: root.boxW
+        height: 120
+        radius: 16
+        color: "#121214"
+        border.color: "#262629"
+        border.width: 1
 
-                PillButton {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "Refresh"
-                    normalColor: "#1C1C1F"
-                    textColor: "#A1A1A6"
-                    borderColor: "#333338"
-                    buttonRadius: 6
-                    onClicked: controller.triggerRefresh()
-                }
-            }
+        readonly property int chainW: 210
+        readonly property int chainXStart: root.boxW - chainW
+        readonly property int maxLeftW: chainXStart - 16 - 14
 
-            // Right side: Carousel Navigation [‹] Provider (N/M) [›] + Disable/Enable All
-            Row {
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 6
-
-                PillButton {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: (controller.currentProvider.active_count > 0) ? "Disable All" : "Enable All"
-                    textColor: (controller.currentProvider.active_count > 0) ? "#A1A1A6" : "#30D158"
-                    normalColor: "#1C1C1F"
-                    borderColor: "#333338"
-                    buttonRadius: 6
-                    onClicked: {
-                        controller.toggleProviderActive(
-                            controller.currentProvider.raw_name,
-                            controller.currentProvider.active_count > 0
-                        );
-                    }
-                }
-
-                CircleButton {
-                    iconType: "left"
-                    radiusSize: 9
-                    onClicked: controller.prevProvider()
-                }
-
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: controller.currentProvider.clean_name + " (" + (controller.selectedProviderIndex + 1) + "/" + controller.providersList.length + ")"
-                    color: "#FFFFFF"
-                    font.family: "SF Pro Display"
-                    font.pixelSize: 8
-                    font.bold: true
-                }
-
-                CircleButton {
-                    iconType: "right"
-                    radiusSize: 9
-                    onClicked: controller.nextProvider()
-                }
-            }
+        // Right Column: SELECT ACCOUNT at chain_x_start, pool_box_y + 16
+        Text {
+            x: poolCard.chainXStart
+            y: 16 - (implicitHeight / 2)
+            text: "SELECT ACCOUNT"
+            color: "#58585E"
+            font.family: "SF Pro Display"
+            font.pixelSize: 7
+            font.bold: true
         }
 
-        // Account Manager Box Container
-        Rectangle {
-            id: amCard
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: amHeader.bottom
-            anchors.topMargin: 4
-            height: 104
-            radius: 10
-            color: "#121214"
-            border.color: "#262629"
-            border.width: 1
+        // Account slots 1..8 at bx1 = slot_x (bx2=slot_x+22, by1=30, by2=52, dx=26)
+        Row {
+            x: poolCard.chainXStart
+            y: 30
+            spacing: 4
 
-            // Left Column (Email, Quota Bar, Action Button)
-            Item {
-                anchors.left: parent.left
-                anchors.leftMargin: 12
-                anchors.top: parent.top
-                anchors.topMargin: 8
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: 8
-                anchors.right: slotSelectorArea.left
-                anchors.rightMargin: 12
-
-                // Line 1: Email & Status Badge
-                Row {
-                    id: emailRow
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    height: 18
+            Repeater {
+                model: (controller.currentProvider.accounts || []).slice(0, 8)
+                Rectangle {
+                    id: slotBtn
+                    required property var modelData
+                    required property int index
+                    width: 22
+                    height: 22
+                    radius: 6
+                    color: {
+                        if (slotBtn.modelData.is_current) return "#1C3A24";
+                        if (slotBtn.modelData.is_active) return "#232326";
+                        return "#141416";
+                    }
+                    border.color: {
+                        if (controller.currentAccount.slot_index === slotBtn.index) return "#FFFFFF";
+                        if (slotBtn.modelData.is_current) return "#30D158";
+                        if (slotBtn.modelData.is_active) return "#3C3C40";
+                        return "#242426";
+                    }
+                    border.width: 1
 
                     Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: controller.currentAccount.full_email || "No accounts registered"
-                        color: "#FFFFFF"
-                        font.family: "SF Pro Display"
-                        font.pixelSize: 10
-                        font.bold: true
-                        elide: Text.ElideRight
-                        width: parent.width - statusPill.width - 8
-                    }
-
-                    Rectangle {
-                        id: statusPill
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: statusText.implicitWidth + 12
-                        height: 16
-                        radius: 5
-                        color: controller.currentAccount.is_current ? "#0B2915" : (controller.currentAccount.is_active ? "#1A1A1D" : "#241416")
-                        border.color: controller.currentAccount.is_current ? "#144D26" : (controller.currentAccount.is_active ? "#333336" : "#4A1E22")
-                        border.width: 1
-
-                        Text {
-                            id: statusText
-                            anchors.centerIn: parent
-                            text: "P" + (controller.currentAccount.priority || 1) + " • " + (controller.currentAccount.is_current ? "Active Route" : (controller.currentAccount.is_active ? "Standby Ready" : "Disabled"))
-                            color: controller.currentAccount.is_current ? "#30D158" : (controller.currentAccount.is_active ? "#FFFFFF" : "#58585E")
-                            font.family: "SF Pro Display"
-                            font.pixelSize: 7
-                            font.bold: true
-                        }
-                    }
-                }
-
-                // Line 2: Quota Label & Countdown
-                Item {
-                    id: quotaLabelRow
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: emailRow.bottom
-                    anchors.topMargin: 4
-                    height: 12
-
-                    Text {
-                        anchors.left: parent.left
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: controller.currentAccount.reset_time_left ? ("QUOTA  •  " + controller.currentAccount.reset_time_left) : "CURRENT QUOTA"
-                        color: "#58585E"
-                        font.family: "SF Pro Display"
-                        font.pixelSize: 7
-                        font.bold: true
-                    }
-
-                    Text {
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: (controller.currentAccount.used_str || "0") + " / " + (controller.currentAccount.limit_str || "0") + " (" + (controller.currentAccount.used_pct_str || "0.0%") + ")"
-                        color: (controller.currentAccount.used_pct >= 90) ? "#FF453A" : ((controller.currentAccount.used_pct >= 75) ? "#FF9F0A" : "#FFFFFF")
+                        anchors.centerIn: parent
+                        text: slotBtn.modelData.priority || (slotBtn.index + 1)
+                        color: slotBtn.modelData.is_current ? "#30D158" : (slotBtn.modelData.is_active ? "#FFFFFF" : "#58585E")
                         font.family: "SF Pro Display"
                         font.pixelSize: 8
                         font.bold: true
                     }
-                }
 
-                // Line 3: Progress Bar
-                Rectangle {
-                    id: quotaTrack
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: quotaLabelRow.bottom
-                    anchors.topMargin: 3
-                    height: 5
-                    radius: 2.5
-                    color: "#202024"
-                    border.color: "#28282C"
-                    border.width: 1
-
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        width: Math.max(0, Math.min(parent.width, parent.width * ((controller.currentAccount.used_pct || 0) / 100.0)))
-                        radius: 2.5
-                        color: (controller.currentAccount.used_pct >= 90) ? "#FF453A" : ((controller.currentAccount.used_pct >= 75) ? "#FF9F0A" : "#30D158")
-
-                        Behavior on width {
-                            NumberAnimation { duration: 250; easing.type: Easing.OutQuad }
-                        }
-                    }
-                }
-
-                // Line 4: Burn stats & Action Button
-                Item {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.bottom: parent.bottom
-                    height: 18
-
-                    PillButton {
-                        anchors.left: parent.left
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: controller.currentAccount.is_active ? "Deactivate Account" : "Activate Account"
-                        textColor: controller.currentAccount.is_active ? "#FF6961" : "#30D158"
-                        normalColor: controller.currentAccount.is_active ? "#381618" : "#122E1A"
-                        borderColor: controller.currentAccount.is_active ? "#662228" : "#1E5E2A"
-                        buttonRadius: 6
-                        onClicked: {
-                            if (controller.currentAccount.id) {
-                                controller.toggleAccountActive(controller.currentAccount.id, controller.currentAccount.is_active);
-                            }
-                        }
-                    }
-
-                    Text {
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "Provider: " + (controller.currentProvider.active_count || 0) + "/" + (controller.currentProvider.total_count || 0) + " Active"
-                        color: "#58585E"
-                        font.family: "SF Pro Display"
-                        font.pixelSize: 7
+                    MouseArea {
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: controller.selectAccountSlot(controller.currentProvider.raw_name, slotBtn.index)
                     }
                 }
             }
+        }
 
-            // Right Column: Account Slot Switcher (1..8)
-            Item {
-                id: slotSelectorArea
-                anchors.right: parent.right
-                anchors.rightMargin: 12
+        // Left Column:
+        // Line 1 (y=16): Email text & Status Badge
+        Text {
+            x: 16
+            y: 16 - (implicitHeight / 2)
+            text: controller.currentAccount.full_email || "No accounts registered"
+            color: "#FFFFFF"
+            font.family: "SF Pro Display"
+            font.pixelSize: 10
+            font.bold: true
+            elide: Text.ElideRight
+            width: poolCard.maxLeftW - statusBadge.width - 12
+        }
+
+        Rectangle {
+            id: statusBadge
+            x: 16 + poolCard.maxLeftW - width
+            y: 6
+            width: statusBadgeText.implicitWidth + 14
+            height: 18
+            radius: 6
+            color: controller.currentAccount.is_current ? "#0B2915" : (controller.currentAccount.is_active ? "#1A1A1D" : "#241416")
+            border.color: controller.currentAccount.is_current ? "#144D26" : (controller.currentAccount.is_active ? "#333336" : "#4A1E22")
+            border.width: 1
+
+            Text {
+                id: statusBadgeText
+                anchors.centerIn: parent
+                text: "P" + (controller.currentAccount.priority || 1) + " • " + (controller.currentAccount.is_current ? "Active Route" : (controller.currentAccount.is_active ? "Standby Ready" : "Disabled"))
+                color: controller.currentAccount.is_current ? "#30D158" : (controller.currentAccount.is_active ? "#FFFFFF" : "#58585E")
+                font.family: "SF Pro Display"
+                font.pixelSize: 7
+                font.bold: true
+            }
+        }
+
+        // Line 2 (y=38): Current Quota Status (Label on left, figures on right)
+        Text {
+            x: 16
+            y: 38 - (implicitHeight / 2)
+            text: controller.currentAccount.reset_time_left ? ("QUOTA  •  " + controller.currentAccount.reset_time_left) : "CURRENT QUOTA"
+            color: "#58585E"
+            font.family: "SF Pro Display"
+            font.pixelSize: 7
+            font.bold: true
+        }
+
+        Text {
+            x: 16 + poolCard.maxLeftW - implicitWidth
+            y: 38 - (implicitHeight / 2)
+            text: (controller.currentAccount.used_str || "0") + " / " + (controller.currentAccount.limit_str || "0") + " (" + (controller.currentAccount.used_pct_str || "0.0%") + ")"
+            color: (controller.currentAccount.used_pct >= 90) ? "#FF453A" : ((controller.currentAccount.used_pct >= 75) ? "#FF9F0A" : "#FFFFFF")
+            font.family: "SF Pro Display"
+            font.pixelSize: 8
+            font.bold: true
+        }
+
+        // Line 3 (y=49..55): Progress Bar
+        Rectangle {
+            x: 16
+            y: 49
+            width: poolCard.maxLeftW
+            height: 6
+            radius: 3
+            color: "#202024"
+            border.color: "#28282C"
+            border.width: 1
+
+            Rectangle {
+                anchors.left: parent.left
                 anchors.top: parent.top
-                anchors.topMargin: 8
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: 8
-                width: 175
+                width: Math.max(0, Math.min(parent.width, parent.width * ((controller.currentAccount.used_pct || 0) / 100.0)))
+                radius: 3
+                color: (controller.currentAccount.used_pct >= 90) ? "#FF453A" : ((controller.currentAccount.used_pct >= 75) ? "#FF9F0A" : "#30D158")
 
-                Text {
-                    id: slotTitle
+                Behavior on width {
+                    NumberAnimation { duration: 250; easing.type: Easing.OutQuad }
+                }
+            }
+        }
+
+        // Line 4 (y=70): Individual Account Token Used
+        Text {
+            x: 16
+            y: 70 - (implicitHeight / 2)
+            text: (controller.timeline === 'today' ? "Today" : (controller.timeline === '7d' ? "7D" : (controller.timeline === '30d' ? "30D" : "All-Time"))) + " Burn: " + (controller.currentAccount.used_str || "0") + " tokens • " + (controller.currentAccount.reqs || 0) + " requests"
+            color: "#A1A1A6"
+            font.family: "SF Pro Display"
+            font.pixelSize: 8
+        }
+
+        // Line 5 (y=90..110): Action Button & Provider Total summary
+        PillButton {
+            x: 16
+            y: 90
+            width: 124
+            height: 20
+            buttonRadius: 9
+            text: controller.currentAccount.is_active ? "Deactivate Account" : "Activate Account"
+            textColor: controller.currentAccount.is_active ? "#FF6961" : "#30D158"
+            normalColor: controller.currentAccount.is_active ? "#381618" : "#122E1A"
+            borderColor: controller.currentAccount.is_active ? "#662228" : "#1E5E2A"
+            onClicked: {
+                if (controller.currentAccount.id) {
+                    controller.toggleAccountActive(controller.currentAccount.id, controller.currentAccount.is_active);
+                }
+            }
+        }
+
+        Text {
+            x: 16 + 124 + 14
+            y: 100 - (implicitHeight / 2)
+            text: "Provider: " + (controller.currentProvider.active_count || 0) + "/" + (controller.currentProvider.total_count || 0) + " Active • " + controller.totalTokensStr + " tok"
+            color: "#58585E"
+            font.family: "SF Pro Display"
+            font.pixelSize: 8
+        }
+    }
+
+    // 4. TOP MODELS BREAKDOWN (y = pool_box_y + pool_box_h + 16 = 168 + 120 + 16 = 304)
+    readonly property int modelsHeaderY: 304
+
+    Text {
+        x: 24
+        y: root.modelsHeaderY - (implicitHeight / 2)
+        text: "TOP MODELS BREAKDOWN"
+        color: "#58585E"
+        font.family: "SF Pro Display"
+        font.pixelSize: 9
+        font.bold: true
+    }
+
+    // 3 Model rows at bar_y = models_header_y + 24 = 328, dy = 32
+    Repeater {
+        model: controller.topModelsList
+        Item {
+            id: modelRowItem
+            required property var modelData
+            required property int index
+
+            readonly property int currentBarY: root.modelsHeaderY + 24 + (index * 32)
+            x: 0
+            y: currentBarY
+            width: root.width
+            height: 26
+
+            Text {
+                x: 24
+                y: -(implicitHeight / 2)
+                text: modelRowItem.modelData.clean_name
+                color: "#FFFFFF"
+                font.family: "SF Pro Display"
+                font.pixelSize: 9
+                elide: Text.ElideRight
+                width: root.width - 48 - modelTokensStat.implicitWidth - 16
+            }
+
+            Text {
+                id: modelTokensStat
+                anchors.right: parent.right
+                anchors.rightMargin: 24
+                y: -(implicitHeight / 2)
+                text: modelRowItem.modelData.tokens_str
+                color: "#A1A1A6"
+                font.family: "SF Pro Display"
+                font.pixelSize: 8
+            }
+
+            Rectangle {
+                x: 24
+                y: 14
+                width: root.width - 48
+                height: 6
+                radius: 3
+                color: "#202024"
+                border.color: "#28282C"
+                border.width: 1
+
+                Rectangle {
                     anchors.left: parent.left
                     anchors.top: parent.top
-                    text: "SELECT ACCOUNT"
-                    color: "#58585E"
+                    anchors.bottom: parent.bottom
+                    width: Math.max(0, Math.min(parent.width, parent.width * modelRowItem.modelData.ratio))
+                    radius: 3
+                    color: "#E5E5EA"
+                }
+            }
+        }
+    }
+
+    // 5. LIVE API CALL HISTORY (feed_header_y = 328 + 3*32 + 6 = 430)
+    readonly property int feedHeaderY: 430
+
+    Text {
+        x: 24
+        y: root.feedHeaderY - (implicitHeight / 2)
+        text: "LIVE API CALL HISTORY"
+        color: "#58585E"
+        font.family: "SF Pro Display"
+        font.pixelSize: 9
+        font.bold: true
+    }
+
+    // 3 Recent call rows at feed_y = feed_header_y + 20 = 450, dy = 22
+    Repeater {
+        model: controller.recentCallsList
+        Item {
+            id: historyRowItem
+            required property var modelData
+            required property int index
+
+            readonly property int currentFeedY: root.feedHeaderY + 20 + (index * 22)
+            x: 0
+            y: currentFeedY
+            width: root.width
+            height: 20
+
+            Rectangle {
+                x: 24
+                y: -2
+                width: 52
+                height: 18
+                radius: 6
+                color: historyRowItem.modelData.is_ok ? "#0B2915" : "#2D0E11"
+                border.color: historyRowItem.modelData.is_ok ? "#144D26" : "#59181D"
+                border.width: 1
+
+                Text {
+                    anchors.centerIn: parent
+                    text: historyRowItem.modelData.status
+                    color: historyRowItem.modelData.is_ok ? "#30D158" : "#FF453A"
                     font.family: "SF Pro Display"
                     font.pixelSize: 7
                     font.bold: true
                 }
-
-                Row {
-                    anchors.left: parent.left
-                    anchors.top: slotTitle.bottom
-                    anchors.topMargin: 4
-                    spacing: 3
-
-                    Repeater {
-                        model: (controller.currentProvider.accounts || []).slice(0, 8)
-                        Rectangle {
-                            id: slotBtn
-                            required property var modelData
-                            required property int index
-                            width: 18
-                            height: 18
-                            radius: 5
-                            color: {
-                                if (slotBtn.modelData.is_current) return "#1C3A24";
-                                if (slotBtn.modelData.is_active) return "#232326";
-                                return "#141416";
-                            }
-                            border.color: {
-                                if (controller.currentAccount.slot_index === slotBtn.index) return "#FFFFFF";
-                                if (slotBtn.modelData.is_current) return "#30D158";
-                                if (slotBtn.modelData.is_active) return "#3C3C40";
-                                return "#242426";
-                            }
-                            border.width: 1
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: slotBtn.modelData.priority || (slotBtn.index + 1)
-                                color: slotBtn.modelData.is_current ? "#30D158" : (slotBtn.modelData.is_active ? "#FFFFFF" : "#58585E")
-                                font.family: "SF Pro Display"
-                                font.pixelSize: 7
-                                font.bold: true
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: controller.selectAccountSlot(controller.currentProvider.raw_name, slotBtn.index)
-                            }
-                        }
-                    }
-                }
             }
-        }
-    }
 
-    // 4. Section: Top Models Breakdown
-    Item {
-        id: modelsSection
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: 12
-        anchors.rightMargin: 12
-        anchors.top: accountManagerSection.bottom
-        anchors.topMargin: 6
-        height: 92
-
-        Text {
-            id: modelsHeader
-            anchors.left: parent.left
-            anchors.top: parent.top
-            text: "TOP MODELS BREAKDOWN"
-            color: "#58585E"
-            font.family: "SF Pro Display"
-            font.pixelSize: 8
-            font.bold: true
-        }
-
-        Column {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: modelsHeader.bottom
-            anchors.topMargin: 4
-            spacing: 5
-
-            Repeater {
-                model: controller.topModelsList
-                Item {
-                    id: modelRowItem
-                    required property var modelData
-                    width: parent.width
-                    height: 22
-
-                    Item {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        height: 13
-
-                        Text {
-                            anchors.left: parent.left
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: modelRowItem.modelData.clean_name
-                            color: "#FFFFFF"
-                            font.family: "SF Pro Display"
-                            font.pixelSize: 9
-                            elide: Text.ElideRight
-                            width: parent.width - modelTokensText.implicitWidth - 14
-                        }
-
-                        Text {
-                            id: modelTokensText
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: modelRowItem.modelData.tokens_str
-                            color: "#A1A1A6"
-                            font.family: "SF Pro Display"
-                            font.pixelSize: 8
-                        }
-                    }
-
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        height: 5
-                        radius: 2.5
-                        color: "#202024"
-                        border.color: "#28282C"
-                        border.width: 1
-
-                        Rectangle {
-                            anchors.left: parent.left
-                            anchors.top: parent.top
-                            anchors.bottom: parent.bottom
-                            width: Math.max(0, Math.min(parent.width, parent.width * modelRowItem.modelData.ratio))
-                            radius: 2.5
-                            color: "#E5E5EA"
-                        }
-                    }
-                }
+            Text {
+                x: 86
+                y: 7 - (implicitHeight / 2)
+                text: historyRowItem.modelData.model
+                color: "#FFFFFF"
+                font.family: "SF Pro Display"
+                font.pixelSize: 9
+                elide: Text.ElideRight
+                width: root.width - 86 - feedStatsStat.implicitWidth - 16
             }
-        }
-    }
 
-    // 5. Section: Live API Call History
-    Item {
-        id: historySection
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: 12
-        anchors.rightMargin: 12
-        anchors.top: modelsSection.bottom
-        anchors.topMargin: 6
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: 8
-
-        Text {
-            id: historyHeader
-            anchors.left: parent.left
-            anchors.top: parent.top
-            text: "LIVE API CALL HISTORY"
-            color: "#58585E"
-            font.family: "SF Pro Display"
-            font.pixelSize: 8
-            font.bold: true
-        }
-
-        Column {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: historyHeader.bottom
-            anchors.topMargin: 4
-            spacing: 4
-
-            Repeater {
-                model: controller.recentCallsList
-                Item {
-                    id: historyRowItem
-                    required property var modelData
-                    width: parent.width
-                    height: 16
-
-                    Rectangle {
-                        id: badgePill
-                        anchors.left: parent.left
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 44
-                        height: 15
-                        radius: 4
-                        color: historyRowItem.modelData.is_ok ? "#0B2915" : "#2D0E11"
-                        border.color: historyRowItem.modelData.is_ok ? "#144D26" : "#59181D"
-                        border.width: 1
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: historyRowItem.modelData.status
-                            color: historyRowItem.modelData.is_ok ? "#30D158" : "#FF453A"
-                            font.family: "SF Pro Display"
-                            font.pixelSize: 7
-                            font.bold: true
-                        }
-                    }
-
-                    Text {
-                        anchors.left: badgePill.right
-                        anchors.leftMargin: 6
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.right: statsLabel.left
-                        anchors.rightMargin: 6
-                        text: historyRowItem.modelData.model
-                        color: "#FFFFFF"
-                        font.family: "SF Pro Display"
-                        font.pixelSize: 8
-                        elide: Text.ElideRight
-                    }
-
-                    Text {
-                        id: statsLabel
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: historyRowItem.modelData.stats_str
-                        color: "#A1A1A6"
-                        font.family: "SF Pro Display"
-                        font.pixelSize: 8
-                    }
-                }
+            Text {
+                id: feedStatsStat
+                anchors.right: parent.right
+                anchors.rightMargin: 24
+                y: 7 - (implicitHeight / 2)
+                text: historyRowItem.modelData.stats_str
+                color: "#A1A1A6"
+                font.family: "SF Pro Display"
+                font.pixelSize: 9
             }
         }
     }

@@ -10,9 +10,9 @@ from .models import format_num, format_time_ago, format_time_left, clean_model_d
 CONFIG_PATH = os.path.expandvars(r'%LOCALAPPDATA%\hermes\dynamic_island_config.json')
 
 VIEW_SPECS = {
-    'min': (290, 38, 19),
-    'normal': (460, 76, 18),
-    'detailed': (590, 436, 22)
+    'min': (320, 42, 21),
+    'normal': (520, 136, 26),
+    'detailed': (660, 540, 28)
 }
 
 class HUDController(QObject):
