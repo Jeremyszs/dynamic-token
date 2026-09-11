@@ -70,7 +70,7 @@ PIL_RIM_GLOW_RGB = (48, 209, 88)
 VIEW_SPECS = {
     'min': (320, 42, 21),
     'normal': (520, 136, 26),
-    'detailed': (630, 540, 28)
+    'detailed': (630, 560, 28)
 }
 
 SWP_NOZORDER = 0x0004
@@ -105,6 +105,13 @@ def format_time_ago(ts_str):
     except Exception:
         return ts_str[11:19] if len(ts_str) >= 19 else ts_str
 
+def clean_provider_name(p):
+    if not p: return '--'
+    if p.startswith('openai-compatible-chat'): return 'OpenAI Chat'
+    if p.startswith('openai-compatible-responses'): return 'OpenAI Resp'
+    if p.startswith('anthropic-compatible'): return 'Anthropic'
+    return p.capitalize()
+
 class DynamicIslandHUD:
     def __init__(self):
         self.root = tk.Tk()
@@ -119,6 +126,7 @@ class DynamicIslandHUD:
 
         self.current_view = 'min'
         self.timeline = 'today'
+        self.selected_provider_idx = 0 # Carousel index for provider accounts
         self.is_hovered = False
         self.last_activity_time = 0
         self.last_delta_tokens = 0
@@ -171,7 +179,6 @@ class DynamicIslandHUD:
         self.icon_photos = {}
 
         self.init_antialiased_dots()
-        self.init_vector_icons()
 
         self._drag_start_x = 0
         self._drag_start_y = 0
@@ -201,15 +208,8 @@ class DynamicIslandHUD:
             'recent': [],
             'latest_model': '--',
             'latest_latency': None,
-            'active_account': '--',
-            'active_account_full': '--',
-            'active_account_reqs': 0,
-            'active_account_toks': 0,
-            'active_account_priority': 1,
-            'account_pool_active': 0,
-            'account_pool_total': 0,
-            'account_list': [],
-            'active_pipeline': 'direct'
+            'providers_data': [], # List of all providers with their accounts & quotas
+            'latest_conn_id': None
         }
         self.last_max_id = 0
 
@@ -255,36 +255,6 @@ class DynamicIslandHUD:
             d_act.ellipse([cx - core_r, cy - core_r, cx + core_r, cy + core_r], fill=(52, 230, 98, 255))
             self.dot_active_frames.append(ImageTk.PhotoImage(im_act.resize((size, size), Image.Resampling.LANCZOS)))
 
-    def init_vector_icons(self):
-        # 1. User Icon (Smooth Antialiased Vector)
-        u_size = 14
-        u_scale = 4
-        u_s = u_size * u_scale
-        u_im = Image.new('RGBA', (u_s, u_s), (0, 0, 0, 0))
-        u_draw = ImageDraw.Draw(u_im)
-        u_cx = u_s / 2
-        u_head_r = 3.0 * u_scale
-        u_draw.ellipse([u_cx - u_head_r, 1.2 * u_scale, u_cx + u_head_r, 1.2 * u_scale + u_head_r * 2], fill=(152, 152, 157, 255))
-        u_draw.pieslice([1.2 * u_scale, 7.8 * u_scale, u_s - 1.2 * u_scale, u_s + 5.5 * u_scale], 180, 360, fill=(152, 152, 157, 255))
-        self.icon_photos['user'] = ImageTk.PhotoImage(u_im.resize((u_size, u_size), Image.Resampling.LANCZOS))
-
-        # 2. Lightning Bolt Icon (Vector)
-        b_size = 13
-        b_scale = 4
-        b_s = b_size * b_scale
-        b_im = Image.new('RGBA', (b_s, b_s), (0, 0, 0, 0))
-        b_draw = ImageDraw.Draw(b_im)
-        b_pts = [
-            (b_s * 0.58, 0),
-            (b_s * 0.18, b_s * 0.54),
-            (b_s * 0.48, b_s * 0.54),
-            (b_s * 0.40, b_s * 0.98),
-            (b_s * 0.82, b_s * 0.44),
-            (b_s * 0.52, b_s * 0.44),
-        ]
-        b_draw.polygon(b_pts, fill=(48, 209, 88, 255))
-        self.icon_photos['bolt'] = ImageTk.PhotoImage(b_im.resize((b_size, b_size), Image.Resampling.LANCZOS))
-
     def load_config(self):
         self.pos_x = None
         self.pos_y = None
@@ -296,6 +266,7 @@ class DynamicIslandHUD:
                     self.pos_y = cfg.get('y')
                     self.current_view = cfg.get('view', 'min')
                     self.timeline = cfg.get('timeline', 'today')
+                    self.selected_provider_idx = cfg.get('provider_idx', 0)
             except Exception:
                 pass
 
@@ -307,7 +278,8 @@ class DynamicIslandHUD:
                     'x': int(self.curr_x),
                     'y': int(self.curr_y),
                     'view': self.current_view,
-                    'timeline': self.timeline
+                    'timeline': self.timeline,
+                    'provider_idx': self.selected_provider_idx
                 }, f)
         except Exception:
             pass
@@ -430,6 +402,20 @@ class DynamicIslandHUD:
         else:
             self.set_view('min')
 
+    def prev_provider(self):
+        providers = self.stats.get('providers_data', [])
+        if providers:
+            self.selected_provider_idx = (self.selected_provider_idx - 1) % len(providers)
+            self.save_config()
+            self.is_dirty = True
+
+    def next_provider(self):
+        providers = self.stats.get('providers_data', [])
+        if providers:
+            self.selected_provider_idx = (self.selected_provider_idx + 1) % len(providers)
+            self.save_config()
+            self.is_dirty = True
+
     def fetch_database_data(self):
         try:
             if not os.path.exists(DB_PATH):
@@ -466,8 +452,8 @@ class DynamicIslandHUD:
             cached = 0
             cost = 0.0
             by_model = {}
-
             today_acc_stats = {}
+
             for r in rows:
                 try:
                     d = json.loads(r[1])
@@ -499,7 +485,7 @@ class DynamicIslandHUD:
 
             latest_m = recent_rows[0][3] if recent_rows else '--'
 
-            # 1. Latency & Reasoning Tokens
+            # Latency & Reasoning Tokens
             latest_latency = None
             tot_reasoning = 0
             latest_conn_id = None
@@ -520,50 +506,57 @@ class DynamicIslandHUD:
             except Exception:
                 pass
 
-            # 2. Full Multi-Account Pool Health Breakdown
-            account_list = []
-            active_acc_name = '--'
-            active_acc_full = '--'
-            active_acc_priority = 1
-            active_acc_reqs = 0
-            active_acc_toks = 0
-            active_count = 0
-            total_count = 0
+            # Multi-Provider Accounts & Quota Pool Aggregation
+            raw_conns = cur.execute('SELECT id, provider, name, email, priority, isActive, data FROM providerConnections ORDER BY provider, priority ASC').fetchall()
+            providers_map = {}
 
-            try:
-                for r in cur.execute('SELECT id, provider, name, email, priority, isActive, data FROM providerConnections WHERE provider="antigravity" ORDER BY priority ASC').fetchall():
-                    total_count += 1
-                    is_active = bool(r[5])
-                    if is_active:
-                        active_count += 1
-                    
-                    full_email = r[3] or r[2] or '--'
-                    short_user = full_email.split('@')[0]
-                    astats = today_acc_stats.get(r[0], {})
-                    a_reqs = astats.get('requests', 0)
-                    a_toks = astats.get('promptTokens', 0)
+            for r in raw_conns:
+                raw_prov = r[1]
+                if raw_prov not in providers_map:
+                    providers_map[raw_prov] = []
 
-                    # Check if currently active connection
-                    is_current = (latest_conn_id and r[0] == latest_conn_id)
-                    if is_current or (active_acc_name == '--' and is_active):
-                        active_acc_name = short_user
-                        active_acc_full = full_email
-                        active_acc_priority = r[4]
-                        active_acc_reqs = a_reqs
-                        active_acc_toks = a_toks
+                is_active = bool(r[5])
+                full_email = r[3] or r[2] or '--'
+                short_user = full_email.split('@')[0]
+                astats = today_acc_stats.get(r[0], {})
+                a_reqs = astats.get('requests', 0)
+                a_toks = astats.get('promptTokens', 0)
+                is_curr = (latest_conn_id and r[0] == latest_conn_id)
 
-                    account_list.append({
-                        'id': r[0],
-                        'short_user': short_user,
-                        'full_email': full_email,
-                        'priority': r[4],
-                        'is_active': is_active,
-                        'is_current': is_current,
-                        'reqs': a_reqs,
-                        'toks': a_toks
-                    })
-            except Exception:
-                pass
+                providers_map[raw_prov].append({
+                    'id': r[0],
+                    'provider': raw_prov,
+                    'short_user': short_user,
+                    'full_email': full_email,
+                    'priority': r[4],
+                    'is_active': is_active,
+                    'is_current': is_curr,
+                    'reqs': a_reqs,
+                    'toks': a_toks
+                })
+
+            # Format into sorted list for navigation carousel (Antigravity first, then others)
+            providers_data = []
+            for p_name, accs in providers_map.items():
+                active_cnt = sum(1 for a in accs if a['is_active'])
+                total_cnt = len(accs)
+                total_p_toks = sum(a['toks'] for a in accs)
+                total_p_reqs = sum(a['reqs'] for a in accs)
+                has_current = any(a['is_current'] for a in accs)
+
+                providers_data.append({
+                    'raw_name': p_name,
+                    'clean_name': clean_provider_name(p_name),
+                    'accounts': accs,
+                    'active_count': active_cnt,
+                    'total_count': total_cnt,
+                    'total_toks': total_p_toks,
+                    'total_reqs': total_p_reqs,
+                    'has_current': has_current
+                })
+
+            # Sort: provider with current active connection first, then by account count descending
+            providers_data.sort(key=lambda x: (not x['has_current'], -x['total_count'], x['clean_name']))
 
             self.stats = {
                 'requests': reqs,
@@ -576,14 +569,8 @@ class DynamicIslandHUD:
                 'recent': recent_rows,
                 'latest_model': latest_m,
                 'latest_latency': latest_latency,
-                'active_account': active_acc_name,
-                'active_account_full': active_acc_full,
-                'active_account_priority': active_acc_priority,
-                'active_account_reqs': active_acc_reqs,
-                'active_account_toks': active_acc_toks,
-                'account_pool_active': active_count,
-                'account_pool_total': total_count,
-                'account_list': account_list
+                'providers_data': providers_data,
+                'latest_conn_id': latest_conn_id
             }
             con.close()
             self.is_dirty = True
@@ -768,8 +755,6 @@ class DynamicIslandHUD:
         if is_flying_delta:
             right_text = f"+{format_num(self.last_delta_tokens)} tok"
             text_color = HEX_GREEN
-            # Place small vector lightning bolt next to delta
-            self.canvas.create_image(w - 24 - 72, cy - 6, anchor='nw', image=self.icon_photos['bolt'])
         else:
             tot_tok = self.stats['prompt'] + self.stats['completion']
             tok_str = format_num(tot_tok)
@@ -814,7 +799,6 @@ class DynamicIslandHUD:
         if is_flying_delta:
             norm_right_text = f"+{format_num(self.last_delta_tokens)} tok"
             norm_color = HEX_GREEN
-            self.canvas.create_image(w - 22 - 76, 64 - 6, anchor='nw', image=self.icon_photos['bolt'])
         else:
             norm_right_text = f"${cost:.2f}  |  {format_num(reqs)} reqs"
             norm_color = HEX_BLUE
@@ -872,7 +856,7 @@ class DynamicIslandHUD:
         self.draw_circle_button(w - 62, 26, r=12, text='—', callback=lambda: self.set_view('min'))
         self.draw_circle_button(w - 32, 26, r=12, text='X', callback=self.shutdown, bg='#301214', fg='#FF453A', border='#5A1E22')
 
-        # Timeline Selector (Left) + Latency Pill (Right)
+        # Timeline Selector (Left) + Latency Pill (Right) - Pure Clean Typography, Zero Icons
         self.render_timeline_tabs(24, 60, anchor='w')
 
         lat_txt = "-- ms"
@@ -885,8 +869,6 @@ class DynamicIslandHUD:
             if tot_ms > 0:
                 lat_txt = f"{tot_ms / 1000.0:.2f}s (TTFT {ttft_ms}ms)"
 
-        # Place bolt icon before latency text
-        self.canvas.create_image(w - 24 - 110, 60 - 6, anchor='nw', image=self.icon_photos['bolt'])
         self.canvas.create_text(
             w - 24, 60, anchor='e',
             text=lat_txt,
@@ -934,16 +916,33 @@ class DynamicIslandHUD:
         self.canvas.create_text(box_x1 + col_w * 4 + 14, box_y1 + 20, anchor='w', text='THINKING', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
         self.canvas.create_text(box_x1 + col_w * 4 + 14, box_y1 + 46, anchor='w', text=format_num(reasoning_tok), fill=HEX_PURPLE, font=(FONT_NAME, 13, 'bold'))
 
-        # 2. DEDICATED SECTION: ACCOUNT POOL & FAILOVER HEALTH
+        # 2. DEDICATED SECTION: MULTI-PROVIDER ACCOUNT & QUOTA POOL (Interactive Carousel)
         pool_y = 168
-        self.canvas.create_text(24, pool_y, anchor='w', text='ACCOUNT POOL & FAILOVER HEALTH', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
+        self.canvas.create_text(24, pool_y, anchor='w', text='ACCOUNT & QUOTA POOLS', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
 
-        # Pool count pill on right: e.g. "5/8 ACTIVE"
-        pool_str = f"{self.stats['account_pool_active']}/{self.stats['account_pool_total']} ACTIVE"
-        self.canvas.create_text(w - 24, pool_y, anchor='e', text=pool_str, fill=HEX_GREEN, font=(FONT_NAME, 8, 'bold'))
+        # Carousel Provider Navigation: [ < ] [ Provider Name ] [ > ]
+        providers = self.stats.get('providers_data', [])
+        num_providers = len(providers)
+        if num_providers > 0:
+            p_idx = self.selected_provider_idx % num_providers
+            curr_prov = providers[p_idx]
+        else:
+            curr_prov = {'clean_name': 'None', 'accounts': [], 'active_count': 0, 'total_count': 0, 'total_toks': 0, 'total_reqs': 0}
 
+        # Carousel Controls on top right
+        car_x = w - 24
+        # Next button [ > ]
+        self.draw_circle_button(car_x - 12, pool_y, r=10, text='›', callback=self.next_provider)
+        # Provider position indicator: e.g. "1/21 Antigravity"
+        prov_label = f"{curr_prov['clean_name']} ({p_idx + 1}/{num_providers})"
+        self.canvas.create_text(car_x - 32, pool_y, anchor='e', text=prov_label, fill=HEX_CYAN, font=(FONT_NAME, 8, 'bold'))
+        # Prev button [ < ]
+        prov_lbl_len = len(prov_label) * 6 + 18
+        self.draw_circle_button(car_x - 32 - prov_lbl_len, pool_y, r=10, text='‹', callback=self.prev_provider)
+
+        # Pool Card Container
         pool_box_y = pool_y + 12
-        pool_box_h = 76
+        pool_box_h = 88
 
         pool_img = Image.new('RGBA', (box_w, pool_box_h), (1, 1, 1, 0))
         p_draw = ImageDraw.Draw(pool_img)
@@ -951,37 +950,64 @@ class DynamicIslandHUD:
         self.card_photos['pool_card'] = ImageTk.PhotoImage(pool_img)
         self.canvas.create_image(box_x1, pool_box_y, anchor='nw', image=self.card_photos['pool_card'])
 
-        # Left side: Active Account Spotlight
-        self.canvas.create_image(box_x1 + 14, pool_box_y + 15, anchor='nw', image=self.icon_photos['user'])
-        self.canvas.create_text(
-            box_x1 + 34, pool_box_y + 22, anchor='w',
-            text=self.stats['active_account_full'],
-            fill=HEX_TEXT_PRIMARY,
-            font=(FONT_NAME, 10, 'bold')
-        )
-        sub_acc = f"Priority {self.stats['active_account_priority']} Active Route • Today: {format_num(self.stats['active_account_toks'])} tok ({self.stats['active_account_reqs']} reqs)"
-        self.canvas.create_text(
-            box_x1 + 14, pool_box_y + 44, anchor='w',
-            text=sub_acc,
-            fill=HEX_TEXT_SECONDARY,
-            font=(FONT_NAME, 8)
-        )
+        # Left Column: Active Account & Quota Consumption for this provider
+        accs = curr_prov.get('accounts', [])
+        active_acc = next((a for a in accs if a.get('is_current')), None)
+        if not active_acc and accs:
+            active_acc = next((a for a in accs if a.get('is_active')), accs[0])
 
-        # Right side: Multi-Account Chain Dots / Badges
-        chain_x_start = box_x1 + box_w - 200
-        self.canvas.create_text(chain_x_start, pool_box_y + 20, anchor='w', text='FAILOVER POOL', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 7, 'bold'))
+        if active_acc:
+            acc_name = active_acc.get('full_email') or active_acc.get('name') or '--'
+            status_text = "Active Route" if active_acc.get('is_current') else ("Standby" if active_acc.get('is_active') else "Disabled")
+            status_color = HEX_GREEN if active_acc.get('is_current') else (HEX_BLUE if active_acc.get('is_active') else HEX_TEXT_MUTED)
 
-        # Draw 8 priority slots horizontally
+            self.canvas.create_text(
+                box_x1 + 16, pool_box_y + 18, anchor='w',
+                text=acc_name,
+                fill=HEX_TEXT_PRIMARY,
+                font=(FONT_NAME, 10, 'bold')
+            )
+
+            quota_sub = f"Priority {active_acc.get('priority', 1)} • {status_text} • Today: {format_num(active_acc.get('toks', 0))} tok ({active_acc.get('reqs', 0)} reqs)"
+            self.canvas.create_text(
+                box_x1 + 16, pool_box_y + 38, anchor='w',
+                text=quota_sub,
+                fill=status_color,
+                font=(FONT_NAME, 8)
+            )
+
+            # Provider Aggregate Quota
+            tot_p_sub = f"Provider Total: {curr_prov['active_count']}/{curr_prov['total_count']} Accounts Active • {format_num(curr_prov['total_toks'])} tok burned"
+            self.canvas.create_text(
+                box_x1 + 16, pool_box_y + 60, anchor='w',
+                text=tot_p_sub,
+                fill=HEX_TEXT_SECONDARY,
+                font=(FONT_NAME, 8)
+            )
+        else:
+            self.canvas.create_text(
+                box_x1 + 16, pool_box_y + 44, anchor='w',
+                text="No accounts registered for this provider",
+                fill=HEX_TEXT_MUTED,
+                font=(FONT_NAME, 9)
+            )
+
+        # Right Column: Multi-Account Priority Chain Badges
+        chain_w = 210
+        chain_x_start = box_x1 + box_w - chain_w
+        self.canvas.create_text(chain_x_start, pool_box_y + 18, anchor='w', text='FAILOVER POOL CHAIN', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 7, 'bold'))
+
         slot_x = chain_x_start
-        for acc in self.stats.get('account_list', [])[:8]:
-            p_num = acc['priority']
-            is_on = acc['is_active']
-            is_curr = acc['is_current']
+        for acc in accs[:8]:
+            p_num = acc.get('priority', 1)
+            is_on = acc.get('is_active', False)
+            is_curr = acc.get('is_current', False)
 
             dot_fill = HEX_GREEN if is_curr else (HEX_BLUE if is_on else '#2C2C2E')
-            self.canvas.create_rectangle(slot_x, pool_box_y + 36, slot_x + 18, pool_box_y + 54, fill=dot_fill, outline=HEX_BORDER, width=1)
-            self.canvas.create_text(slot_x + 9, pool_box_y + 45, text=str(p_num), fill='#000000' if (is_curr or is_on) else HEX_TEXT_MUTED, font=(FONT_NAME, 7, 'bold'))
-            slot_x += 24
+            self.canvas.create_rectangle(slot_x, pool_box_y + 34, slot_x + 20, pool_box_y + 54, fill=dot_fill, outline=HEX_BORDER, width=1)
+            self.canvas.create_text(slot_x + 10, pool_box_y + 44, text=str(p_num), fill='#000000' if (is_curr or is_on) else HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
+
+            slot_x += 25
 
         # 3. TOP MODELS BREAKDOWN
         models_y = pool_box_y + pool_box_h + 16
