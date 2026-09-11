@@ -82,9 +82,8 @@ class WindowPositionService(QObject):
             elif clamped_x + w > s_right:
                 clamped_x = s_right - w
 
-        # Vertical clamping
+        # Vertical clamping: keep fully inside usable workarea
         if h >= avail.height():
-            # Edge case: widget is taller than available screen height -> anchor to top
             clamped_y = s_top
         else:
             if clamped_y < s_top:
@@ -92,10 +91,10 @@ class WindowPositionService(QObject):
             elif clamped_y + h > s_bottom:
                 clamped_y = s_bottom - h
 
-        # Check magnetic screen-top notch docking (within 16px of top available workarea)
-        dist_to_top = abs(clamped_y - s_top)
+        # Check magnetic screen-top notch docking ONLY when user actually releases within 16px of top edge
+        dist_to_top = abs(y - s_top)
         docked_top = False
-        if is_docked_notch or dist_to_top <= 16:
+        if dist_to_top <= 16:
             clamped_y = s_top
             docked_top = True
 
