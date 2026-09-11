@@ -260,8 +260,6 @@ class DynamicIslandHUD:
         self.pulse_frame_idx = 0
         self.rim_glow_phase = 0.0
         self.last_tick_time = time.perf_counter()
-
-        self.setup_hotkey()
         self.tick_loop()
 
     def init_antialiased_dots(self):
@@ -1194,6 +1192,8 @@ class DynamicIslandHUD:
         # 3. DEDICATED SECTION: ACCOUNT MANAGER (y=154, h=124)
         pool_header_y = 154
         self.canvas.create_text(24, pool_header_y, anchor='w', text='ACCOUNT MANAGER', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
+        # Refresh button cleanly separated from ACCOUNT MANAGER title with 16px padding
+        self.draw_circle_button(188, pool_header_y, r=9, text='refresh', callback=self.refresh_data)
 
         providers = self.stats.get('providers_data', [])
         num_providers = len(providers)
@@ -1526,85 +1526,21 @@ class DynamicIslandHUD:
             self.canvas.create_line(cx - d, cy + d, cx + d, cy - d, fill=fg, width=2, capstyle='round')
         elif text == 'minimize':
             self.canvas.create_line(cx - 4, cy, cx + 4, cy, fill=fg, width=2, capstyle='round')
+        elif text == 'refresh':
+            # Apple-style geometric circular arc with arrowhead for refresh
+            self.canvas.create_arc(cx - 4, cy - 4, cx + 4, cy + 4, start=45, extent=270, style='arc', outline=fg, width=1.6)
+            self.canvas.create_line(cx + 1, cy - 5, cx + 4, cy - 3, fill=fg, width=1.6, capstyle='round')
+            self.canvas.create_line(cx + 4, cy - 3, cx + 4, cy, fill=fg, width=1.6, capstyle='round')
         else:
             self.canvas.create_text(cx, cy, text=text, fill=fg, font=(FONT_NAME, 8, 'bold'))
         self.hit_zones.append((cx - r, cy - r, cx + r, cy + r, callback))
 
-    def toggle_view_hotkey(self):
-        # Toggle between min and detailed view
-        if self.current_view == 'min':
-            self.set_view('detailed')
-        else:
-            self.set_view('min')
-
-    def setup_hotkey(self):
-        # Global low-level hook for Win + Alt + D (bypasses Windows Game Bar reservation)
-        WH_KEYBOARD_LL = 13
-        WM_KEYDOWN = 0x0100
-        WM_SYSKEYDOWN = 0x0104
-        VK_D = 0x44
-        VK_LWIN = 0x5B
-        VK_RWIN = 0x5C
-        VK_LMENU = 0xA4
-        VK_RMENU = 0xA5
-
-        HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
-
-        class KBDLLHOOKSTRUCT(ctypes.Structure):
-            _fields_ = [
-                ('vkCode', wintypes.DWORD),
-                ('scanCode', wintypes.DWORD),
-                ('flags', wintypes.DWORD),
-                ('time', wintypes.DWORD),
-                ('dwExtraInfo', ctypes.POINTER(ctypes.c_ulong))
-            ]
-
-        def is_down(vk):
-            return (user32.GetAsyncKeyState(vk) & 0x8000) != 0
-
-        self._hotkey_hook = None
-        self._hotkey_last_trigger = 0.0
-
-        def hook_proc(nCode, wParam, lParam):
-            if nCode == 0 and wParam in (WM_KEYDOWN, WM_SYSKEYDOWN):
-                kb = KBDLLHOOKSTRUCT.from_address(lParam)
-                if kb.vkCode == VK_D:
-                    win_down = is_down(VK_LWIN) or is_down(VK_RWIN)
-                    alt_down = is_down(VK_LMENU) or is_down(VK_RMENU)
-                    if win_down and alt_down:
-                        now = time.time()
-                        if now - self._hotkey_last_trigger > 0.35:
-                            self._hotkey_last_trigger = now
-                            self.root.after(0, self.toggle_view_hotkey)
-                        return 1
-            return user32.CallNextHookEx(None, nCode, wParam, lParam)
-
-        self._c_hook_proc = HOOKPROC(hook_proc)
-
-        def run_hook_pump():
-            self._hotkey_hook = user32.SetWindowsHookExW(WH_KEYBOARD_LL, self._c_hook_proc, None, 0)
-            msg = wintypes.MSG()
-            while getattr(self, '_hotkey_running', True):
-                bRet = user32.GetMessageW(ctypes.byref(msg), 0, 0, 0)
-                if bRet == 0 or bRet == -1:
-                    break
-                user32.TranslateMessage(ctypes.byref(msg))
-                user32.DispatchMessageW(ctypes.byref(msg))
-            if self._hotkey_hook:
-                user32.UnhookWindowsHookEx(self._hotkey_hook)
-                self._hotkey_hook = None
-
-        self._hotkey_running = True
-        self._hotkey_thread = threading.Thread(target=run_hook_pump, daemon=True)
-        self._hotkey_thread.start()
+    def refresh_data(self):
+        self.fetch_database_data()
+        self.check_9router_health()
+        self.is_dirty = True
 
     def shutdown(self):
-        self._hotkey_running = False
-        if getattr(self, '_hotkey_hook', None):
-            try:
-                user32.PostQuitMessage(0)
-            except Exception:
-                pass
         self.save_config()
         self.root.destroy()
         sys.exit(0)
