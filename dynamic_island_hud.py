@@ -1091,10 +1091,8 @@ class DynamicIslandHUD:
             # Available horizontal width for the left side before hitting the account pills:
             max_left_w = chain_x_start - (box_x1 + 16) - 14  # ~346px
 
-            # Line 1 (y=pool_box_y + 16): Responsive Account Name & Status
-            # Email is anchored LEFT, and Status Badge is anchored RIGHT at max_left_w!
-            # Since max_left_w is 346px, and email is ~125px while status is ~95px, they sit at opposite ends with ~125px of empty space in between and CAN NEVER OVERLAP!
-            status_badge = f"P{displayed_acc.get('priority', 1)}  •  {status_text}"
+            # Line 1 (y=pool_box_y + 16): Responsive Account Name & Status Badge
+            # Email is on left. Status badge is drawn as a dedicated Apple capsule pill tag at the right of the column
             disp_email = acc_name
             if len(disp_email) > 22:
                 disp_email = disp_email[:20] + '..'
@@ -1106,13 +1104,18 @@ class DynamicIslandHUD:
                 fill=HEX_TEXT_PRIMARY,
                 font=(FONT_NAME, 10, 'bold')
             )
-            # 2. Status badge (Anchor 'e' on right of left column)
-            self.canvas.create_text(
-                box_x1 + 16 + max_left_w, pool_box_y + 16, anchor='e',
-                text=status_badge,
-                fill=status_color,
-                font=(FONT_NAME, 8, 'bold')
-            )
+
+            # 2. Apple status pill badge anchored on the right of the left sub-section
+            status_tag_text = f"P{displayed_acc.get('priority', 1)}  •  {status_text}"
+            tag_w = len(status_tag_text) * 6 + 18
+            tag_x2 = box_x1 + 16 + max_left_w
+            tag_x1 = tag_x2 - tag_w
+            tag_fill = '#0B2915' if is_curr else ('#1A1A1D' if is_on else '#241416')
+            tag_border = '#144D26' if is_curr else ('#333336' if is_on else '#4A1E22')
+            tag_fg = HEX_GREEN if is_curr else (HEX_TEXT_PRIMARY if is_on else HEX_TEXT_MUTED)
+
+            self.draw_pill_button_styled(tag_x1, pool_box_y + 6, tag_x2, pool_box_y + 24, status_tag_text,
+                                        callback=lambda: None, fill=tag_fill, fg=tag_fg, border=tag_border, radius=6)
 
             # Line 2 (y=pool_box_y + 38): Current Quota Status (Label on left + Figures on right)
             self.canvas.create_text(
@@ -1130,16 +1133,16 @@ class DynamicIslandHUD:
                 font=(FONT_NAME, 8, 'bold')
             )
 
-            # Line 3 (y=pool_box_y + 51): DEDICATED PROGRESS BAR (Zero overlap with any text!)
+            # Line 3 (y=pool_box_y + 51): DEDICATED PROGRESS BAR (Capsule styled with rounded ends)
             bar_x1 = box_x1 + 16
             bar_x2 = bar_x1 + max_left_w
             bar_y1 = pool_box_y + 49
-            bar_y2 = pool_box_y + 54
-            self.canvas.create_rectangle(bar_x1, bar_y1, bar_x2, bar_y2, fill='#1C1C1E', outline='')
+            bar_y2 = pool_box_y + 55
+            self.draw_pill_button_styled(bar_x1, bar_y1, bar_x2, bar_y2, '', callback=lambda: None, fill='#202024', border='#28282C', radius=3)
             acc_bar_color = '#FF453A' if acc_pct >= 90 else ('#FF9F0A' if acc_pct >= 75 else HEX_GREEN)
             fill_w = int(max_left_w * acc_ratio)
-            if fill_w > 0:
-                self.canvas.create_rectangle(bar_x1, bar_y1, bar_x1 + fill_w, bar_y2, fill=acc_bar_color, outline='')
+            if fill_w > 4:
+                self.draw_pill_button_styled(bar_x1, bar_y1, bar_x1 + fill_w, bar_y2, '', callback=lambda: None, fill=acc_bar_color, border=acc_bar_color, radius=3)
 
             # Line 4 (y=pool_box_y + 70): Individual Account Token Used (Synchronized with timeline)
             used_str = f"{t_label} Burn: {format_num(timeline_toks)} tokens • {timeline_reqs} requests"
@@ -1182,14 +1185,13 @@ class DynamicIslandHUD:
                 font=(FONT_NAME, 9)
             )
 
-        # 4. TOP MODELS BREAKDOWN (Bold section title, generous breathing room under title)
+        # 4. TOP MODELS BREAKDOWN (Apple iOS Storage/Battery style progress track)
         models_header_y = pool_box_y + pool_box_h + 16
         self.canvas.create_text(24, models_header_y, anchor='w', text='TOP MODELS BREAKDOWN', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
 
         sorted_models = sorted(self.stats['models'].items(), key=lambda item: item[1]['prompt'], reverse=True)[:3]
 
-        # Generous vertical separation under title to match Live History spacing
-        bar_y = models_header_y + 28
+        bar_y = models_header_y + 24
         for m_name, mdata in sorted_models:
             p_val = mdata['prompt'] + mdata['completion']
             r_val = mdata['requests']
@@ -1199,28 +1201,33 @@ class DynamicIslandHUD:
             self.canvas.create_text(w - 24, bar_y, anchor='e', text=f"{format_num(p_val)} tok ({r_val} reqs)", fill=HEX_TEXT_SECONDARY, font=(FONT_NAME, 8))
 
             bar_w_max = w - 48
-            # 8px vertical gap between model label baseline and track bar
-            self.canvas.create_rectangle(24, bar_y + 13, 24 + bar_w_max, bar_y + 17, fill='#1C1C1E', outline='')
-            self.canvas.create_rectangle(24, bar_y + 13, 24 + int(bar_w_max * ratio), bar_y + 17, fill='#E5E5EA', outline='')
-            bar_y += 26
+            track_y1 = bar_y + 14
+            track_y2 = bar_y + 20
+            self.draw_pill_button_styled(24, track_y1, 24 + bar_w_max, track_y2, '', callback=lambda: None, fill='#202024', border='#28282C', radius=3)
+            fill_bar_w = int(bar_w_max * ratio)
+            if fill_bar_w > 4:
+                self.draw_pill_button_styled(24, track_y1, 24 + fill_bar_w, track_y2, '', callback=lambda: None, fill='#E5E5EA', border='#E5E5EA', radius=3)
+            bar_y += 32
 
-        # 5. LIVE API CALL HISTORY (Bold section title, matching padding under title)
-        feed_header_y = bar_y + 8
+        # 5. LIVE API CALL HISTORY (Rounded status badge pills)
+        feed_header_y = bar_y + 6
         self.canvas.create_text(24, feed_header_y, anchor='w', text='LIVE API CALL HISTORY', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
 
-        feed_y = feed_header_y + 22
+        feed_y = feed_header_y + 20
         for row in self.stats['recent'][:3]:
             t_ago = format_time_ago(row[1])
             m_tag = row[3]
             toks = row[4] + row[5]
             st = row[7]
 
-            self.canvas.create_rectangle(24, feed_y - 2, 24 + 48, feed_y + 15, fill='#072612' if st == 'ok' else '#260B0D', outline='')
-            self.canvas.create_text(48, feed_y + 6, anchor='center', text='200 OK' if st == 'ok' else 'ERR', fill=HEX_GREEN if st == 'ok' else '#FF453A', font=(FONT_NAME, 8, 'bold'))
+            badge_fill = '#0B2915' if st == 'ok' else '#2D0E11'
+            badge_border = '#144D26' if st == 'ok' else '#59181D'
+            badge_fg = HEX_GREEN if st == 'ok' else '#FF453A'
+            self.draw_pill_button_styled(24, feed_y - 2, 24 + 52, feed_y + 16, '200 OK' if st == 'ok' else 'ERR', callback=lambda: None, fill=badge_fill, fg=badge_fg, border=badge_border, radius=6)
 
-            self.canvas.create_text(82, feed_y + 6, anchor='w', text=f"{m_tag}", fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 9))
-            self.canvas.create_text(w - 24, feed_y + 6, anchor='e', text=f"+{format_num(toks)} tok • {t_ago}", fill=HEX_TEXT_SECONDARY, font=(FONT_NAME, 9))
-            feed_y += 21
+            self.canvas.create_text(86, feed_y + 7, anchor='w', text=f"{m_tag}", fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 9))
+            self.canvas.create_text(w - 24, feed_y + 7, anchor='e', text=f"+{format_num(toks)} tok • {t_ago}", fill=HEX_TEXT_SECONDARY, font=(FONT_NAME, 9))
+            feed_y += 22
 
     # --- UI Helpers & Rounded Card Rasterizers ---
     def draw_rounded_card(self, cache_key, x, y, width, height, radius=16):
