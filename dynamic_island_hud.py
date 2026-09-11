@@ -42,7 +42,8 @@ except Exception:
 DB_PATH = os.path.expandvars(r'%APPDATA%\9router\db\data.sqlite')
 CONFIG_PATH = os.path.expandvars(r'%LOCALAPPDATA%\hermes\dynamic_island_config.json')
 
-COLOR_TRANSPARENT = '#010101'
+COLOR_TRANSPARENT = '#010203'
+PIL_TRANSPARENT_RGB = (1, 2, 3)
 
 # Refined Apple Palette
 HEX_BG = '#000000'
@@ -755,7 +756,7 @@ class DynamicIslandHUD:
 
         # Composite onto the color-key background before downsampling.
         # Resampling transparent RGBA edges can leave bright fringe pixels.
-        im = Image.new('RGBA', (rw, rh), (1, 1, 1, 0))
+        im = Image.new('RGBA', (rw, rh), (*PIL_TRANSPARENT_RGB, 0))
         draw = ImageDraw.Draw(im)
 
         # 1. Base Pitch Black Fill
@@ -773,10 +774,12 @@ class DynamicIslandHUD:
             rim_col = (*PIL_RIM_GLOW_RGB, alpha)
             draw.rounded_rectangle([0, 0, rw - 1, rh - 1], radius=rr, outline=rim_col, width=3 * scale)
 
-        # Flatten the resized edge onto the color-key background so transparent
-        # edge pixels cannot become isolated bright fringes in Tk.
+        # Flatten the resized edge onto the asymmetric color-key background.
+        # Using asymmetric #010203 guarantees that symmetric grayscale Lanczos ringing
+        # (e.g. (1, 1, 1)) inside the capsule never matches the window transparent color,
+        # completely preventing punch-through holes along the curved corner border.
         result = im.resize((w, h), Image.Resampling.LANCZOS)
-        key_bg = Image.new('RGBA', result.size, (1, 1, 1, 255))
+        key_bg = Image.new('RGBA', result.size, (*PIL_TRANSPARENT_RGB, 255))
         result = Image.alpha_composite(key_bg, result).convert('RGB')
         if time_since_call >= 2.5 and not getattr(self, 'is_animating', False):
             self._capsule_cache[cache_key] = result
