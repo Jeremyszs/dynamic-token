@@ -140,6 +140,8 @@ class HUDController(QObject):
 
     def _on_background_data_ready(self):
         self.statsChanged.emit()
+        self.selectedAccountChanged.emit()
+        self.selectedProviderChanged.emit()
 
     def poll_tick(self):
         self.check_health()
@@ -163,6 +165,8 @@ class HUDController(QObject):
                 self.isSplitActive = want_split
 
             self.statsChanged.emit()
+            self.selectedAccountChanged.emit()
+            self.selectedProviderChanged.emit()
 
     # Properties
     @Property(str, notify=viewChanged)
