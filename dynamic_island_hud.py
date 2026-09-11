@@ -417,8 +417,9 @@ class DynamicIslandHUD:
         self.is_hovered = True
         if self.current_view == 'min' and not self.is_animating:
             m_left, m_top, m_right, m_bottom = self.get_current_monitor_workarea()
-            nw = VIEW_SPECS['min'][0] + 16.0
-            nh = VIEW_SPECS['min'][1] + 4.0
+            # Expand horizontally to 350px for ample breathing room during hover peek
+            nw = 350.0
+            nh = float(VIEW_SPECS['min'][1])
             self.target_w = nw
             self.target_h = nh
             self.target_x = max(float(m_left + 10), min(float(m_right - nw - 10), self.anchor_center_x - (nw / 2.0)))
@@ -1070,6 +1071,33 @@ class DynamicIslandHUD:
         img = frame_list[self.pulse_frame_idx]
         self.canvas.itemconfig('dot_img', image=img)
 
+    def get_primary_reset_time_left(self):
+        providers = self.stats.get('providers_data', [])
+        if not providers:
+            return None
+        # Check active/current provider's current account
+        curr_prov = providers[0]
+        accs = curr_prov.get('accounts', [])
+        if not accs:
+            return None
+        # Find current or first active account
+        target_acc = next((a for a in accs if a.get('is_current')), accs[0])
+        cid = target_acc.get('id')
+        live_data = self.fetch_live_quota_for_connection(cid)
+        reset_at = None
+        if live_data and 'quotas' in live_data:
+            q_dict = live_data['quotas']
+            latest_m = self.stats.get('latest_model', '')
+            best_q = q_dict.get(latest_m) or q_dict.get('gemini-3.8-flash-high') or (next(iter(q_dict.values())) if q_dict else None)
+            if best_q and 'resetAt' in best_q:
+                reset_at = best_q['resetAt']
+        if not reset_at and target_acc.get('reset_at'):
+            reset_at = target_acc['reset_at']
+        if not reset_at:
+            now_utc = datetime.datetime.now(datetime.timezone.utc)
+            reset_at = (now_utc + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+        return format_time_left(reset_at)
+
     # --- VIEW: MINIMUM ---
     def render_min(self, w, h):
         cy = h // 2
@@ -1091,6 +1119,16 @@ class DynamicIslandHUD:
         if is_flying_delta:
             right_text = f"+{format_num(self.last_delta_tokens)} tok"
             text_color = HEX_GREEN
+        elif self.is_hovered:
+            # Hover peek: show live token speed and/or quota reset countdown
+            peek_parts = []
+            if getattr(self, 'latest_tps', None):
+                peek_parts.append(f"{self.latest_tps:.0f} tok/s")
+            reset_left = self.get_primary_reset_time_left()
+            if reset_left:
+                peek_parts.append(f"Resets {reset_left}")
+            right_text = " • ".join(peek_parts) if peek_parts else f"{self.latest_tps:.0f} tok/s" if getattr(self, 'latest_tps', None) else "Peek Ready"
+            text_color = HEX_ORANGE if getattr(self, 'latest_tps', None) else HEX_TEXT_PRIMARY
         else:
             tot_tok = self.stats['prompt'] + self.stats['completion']
             tok_str = format_num(tot_tok)

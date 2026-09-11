@@ -8,7 +8,7 @@ Built with native Python and Win32 APIs for near-zero resource impact (~15MB RAM
 - **Apple Dynamic Island Aesthetics:** Pitch-black container, smooth pill/capsule corners, and a 4× supersampled anti-aliased live status indicator.
 - **Harmonic Spring Motion:** Calibrated 2nd-order damped spring physics (`stiffness = 169.0`, `damping = 26.0`) with in-place glyph translation (zero canvas churn).
 - **Three Interactive View Tiers:**
-  - **Minimum:** Compact pill displaying active model, live token count, and cost.
+  - **Minimum:** Compact pill displaying active model, live token count, and cost. Features an **interactive hover peek** that smoothly expands on mouseover to reveal live generation throughput (`tok/s`) and quota reset countdown (`Resets 44m`).
   - **Normal:** Expanded card with timeline filters, large typography, requests count, and last executed request ticker.
   - **Detailed:** 5-metric overview (Total Tokens, Cost, Requests, Cache Hit Ratio, Thinking tokens), Carousel Account Manager with active provider controls, ranked model progress bars, live API log with HTTP status pills, 9router runner, and shutdown controls.
 - **Integrated 9router Runner:** Header `9R` button checks daemon health, starts 9router in the background without stealing focus if stopped, and opens the Web UI.
@@ -63,6 +63,7 @@ The launcher automatically detects:
 ---
 
 ## Controls
+- **Hover Peek (`Min` mode):** Hover cursor over the compact pill to peek live token generation speed and quota reset countdown without clicking.
 - **Left-Click:** Cycle views (`Min` ➔ `Normal` ➔ `Detailed` ➔ `Min`).
 - **Right-Click:** Instantly toggle between `Min` and `Detailed`.
 - **Drag:** Click and hold anywhere to freely position across any monitor.
