@@ -61,18 +61,23 @@ Window {
         }
 
         // Split Island Activity Bubble (ejected to the right when active generation occurs)
-        Rectangle {
+        Item {
             id: splitBubble
             visible: controller.currentView === "min" && controller.isSplitActive
             width: Math.max(56, splitText.implicitWidth + 24)
             height: parent.height
-            radius: height / 2
             anchors.right: parent.right
             anchors.top: parent.top
             anchors.bottom: parent.bottom
-            color: "#000000"
-            border.color: controller.isHovered ? "#444448" : "#262629"
-            border.width: 1
+
+            IslandCapsule {
+                anchors.fill: parent
+                cornerRadius: parent.height / 2
+                isDockedNotch: controller.isDockedNotch
+                isHovered: controller.isHovered
+                isActivityActive: false
+                isActivityError: false
+            }
 
             Text {
                 id: splitText
