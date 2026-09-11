@@ -296,13 +296,15 @@ class DynamicIslandHUD:
         self.target_x = max(float(m_left + 10), min(float(m_right - tw - 10), self.anchor_center_x - (tw / 2.0)))
         self.target_y = max(float(m_top + 10), min(float(m_bottom - th - 10), self.curr_y))
 
+        # Render new view content for target size immediately so there is zero delay
+        self.render(w=int(tw), h=int(th), radius=int(tr))
         self.is_animating = True
-        self.is_dirty = True
+        self.is_dirty = False
         self.save_config()
 
     def on_mouse_enter(self, event):
         self.is_hovered = True
-        if self.current_view == 'min':
+        if self.current_view == 'min' and not self.is_animating:
             m_left, m_top, m_right, m_bottom = self.get_current_monitor_workarea()
             nw = VIEW_SPECS['min'][0] + 16.0
             nh = VIEW_SPECS['min'][1] + 4.0
@@ -315,7 +317,7 @@ class DynamicIslandHUD:
 
     def on_mouse_leave(self, event):
         self.is_hovered = False
-        if self.current_view == 'min':
+        if self.current_view == 'min' and not self.is_animating:
             m_left, m_top, m_right, m_bottom = self.get_current_monitor_workarea()
             nw = float(VIEW_SPECS['min'][0])
             nh = float(VIEW_SPECS['min'][1])
@@ -547,10 +549,13 @@ class DynamicIslandHUD:
             if self.canvas.find_withtag('norm_tabs'):
                 self.canvas.coords('norm_tabs', w - 22, 24)
 
-    def render(self):
-        w = max(20, int(self.curr_w))
-        h = max(20, int(self.curr_h))
-        radius = max(8, int(self.curr_r))
+    def render(self, w=None, h=None, radius=None):
+        if w is None:
+            w = max(20, int(self.curr_w))
+        if h is None:
+            h = max(20, int(self.curr_h))
+        if radius is None:
+            radius = max(8, int(self.curr_r))
 
         self.hit_zones.clear()
 
