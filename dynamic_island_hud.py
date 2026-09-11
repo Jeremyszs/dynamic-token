@@ -276,8 +276,11 @@ class DynamicIslandHUD:
         self.notch_morph_progress = 0.0  # 0.0 = full floating pill, 1.0 = hardware notch flat top
         self.is_split_active = False
         self.split_morph_progress = 0.0  # 0.0 = continuous capsule, 1.0 = detached bubble
+        self.vel_split = 0.0
+        self.target_split = 0.0
         self.split_bubble_w = 46.0
         self.split_bubble_gap = 10.0
+        self._last_rgn_state = None
         self._last_live_quota_fetch = 0.0
 
         self.check_startup_registration()
@@ -917,6 +920,20 @@ class DynamicIslandHUD:
         damping = 26.0
 
         morph_updated = False
+        # Harmonic 2nd-order damped spring for Split Island morphing
+        # Uses exact Apple Island spring coefficients (stiffness=169, damping=26) for fluid 165Hz organic motion
+        force_split = (self.target_split - self.split_morph_progress) * 169.0 - self.vel_split * 26.0
+        self.vel_split += force_split * dt
+        self.split_morph_progress += self.vel_split * dt
+
+        if abs(self.target_split - self.split_morph_progress) < 0.005 and abs(self.vel_split) < 0.01:
+            if self.split_morph_progress != self.target_split:
+                self.split_morph_progress = self.target_split
+                self.vel_split = 0.0
+                morph_updated = True
+        else:
+            morph_updated = True
+
         if self.is_animating:
             force_w = (self.target_w - self.curr_w) * stiffness - self.vel_w * damping
             force_h = (self.target_h - self.curr_h) * stiffness - self.vel_h * damping
@@ -964,13 +981,7 @@ class DynamicIslandHUD:
             # Update Split Island active condition:
             # Active when a call completed within 3.5 seconds AND latest_tps > 0 in min view
             want_split = (self.current_view == 'min' and time_since_call < 3.5 and getattr(self, 'latest_tps', None) is not None)
-            target_split = 1.0 if want_split else 0.0
-            if abs(self.split_morph_progress - target_split) > 0.005:
-                self.split_morph_progress += (target_split - self.split_morph_progress) * min(1.0, dt * 16.0)
-                morph_updated = True
-            elif self.split_morph_progress != target_split:
-                self.split_morph_progress = target_split
-                morph_updated = True
+            self.target_split = 1.0 if want_split else 0.0
 
             # Update Notch Docking condition:
             target_notch = 1.0 if self.is_docked_notch else 0.0
@@ -1069,58 +1080,62 @@ class DynamicIslandHUD:
 
     def update_morph_layout(self, w, h, radius):
         rim_active = time.time() - self.last_activity_time < 2.5
+        is_split = (self.current_view == 'min' and self.split_morph_progress > 0.01)
+        is_notch = (self.notch_morph_progress > 0.01)
         now = time.perf_counter()
-        paint_key = (w, h, radius, self.is_hovered, round(self.split_morph_progress, 2), round(self.notch_morph_progress, 2))
-        if (rim_active or getattr(self, 'is_animating', False)) and now - self._last_morph_paint >= (1.0 / 60.0):
-            # Limit expensive supersampled paints to a visual 60Hz ceiling.
-            self.bg_photo = ImageTk.PhotoImage(self.draw_capsule_image(w, h, radius))
-            self._last_morph_paint = now
-        elif not rim_active and not getattr(self, 'is_animating', False):
-            if paint_key not in self._capsule_photo_cache:
-                self._capsule_photo_cache[paint_key] = ImageTk.PhotoImage(self.draw_capsule_image(w, h, radius))
-            self.bg_photo = self._capsule_photo_cache[paint_key]
+
+        # Discretize morph progress into subtle steps to allow caching without visual stepping
+        split_step = round(self.split_morph_progress, 2)
+        notch_step = round(self.notch_morph_progress, 2)
+        paint_key = (w, h, radius, self.is_hovered, split_step, notch_step)
+
+        if paint_key not in self._capsule_photo_cache:
+            self._capsule_photo_cache[paint_key] = ImageTk.PhotoImage(self.draw_capsule_image(w, h, radius))
+        self.bg_photo = self._capsule_photo_cache[paint_key]
 
         if not self.canvas.find_withtag('bg'):
             self.canvas.create_image(0, 0, anchor='nw', image=self.bg_photo, tags='bg')
         else:
             self.canvas.itemconfig('bg', image=self.bg_photo)
 
-        # Hardware-level window shape clipping: eliminates square corners outside geometry
-        try:
-            is_split = (self.current_view == 'min' and self.split_morph_progress > 0.01)
-            is_notch = (self.notch_morph_progress > 0.01)
-            if is_split:
-                gap = int(self.split_bubble_gap * self.split_morph_progress)
-                bw = int(self.split_bubble_w)
-                main_w = w - gap - bw
-                hrgn_main = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, int(main_w) + 1, int(h) + 1, int(radius * 2), int(radius * 2))
-                if is_notch:
-                    hrgn_rect = ctypes.windll.gdi32.CreateRectRgn(0, 0, int(main_w) + 1, int(radius) + 1)
-                    hrgn_notch = ctypes.windll.gdi32.CreateRectRgn(0, 0, 0, 0)
-                    ctypes.windll.gdi32.CombineRgn(hrgn_notch, hrgn_rect, hrgn_main, 2)
-                    ctypes.windll.gdi32.DeleteObject(hrgn_main)
-                    ctypes.windll.gdi32.DeleteObject(hrgn_rect)
-                    hrgn_main = hrgn_notch
+        # Hardware-level window shape clipping: ONLY update when geometry step actually changes!
+        # Repeatedly calling SetWindowRgn every frame stalls the Windows DWM compositor.
+        rgn_state = (w, h, radius, is_split, int(self.split_bubble_gap * self.split_morph_progress), is_notch)
+        if getattr(self, '_last_rgn_state', None) != rgn_state:
+            self._last_rgn_state = rgn_state
+            try:
+                if is_split:
+                    gap = int(self.split_bubble_gap * self.split_morph_progress)
+                    bw = int(self.split_bubble_w)
+                    main_w = w - gap - bw
+                    hrgn_main = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, int(main_w) + 1, int(h) + 1, int(radius * 2), int(radius * 2))
+                    if is_notch:
+                        hrgn_rect = ctypes.windll.gdi32.CreateRectRgn(0, 0, int(main_w) + 1, int(radius) + 1)
+                        hrgn_notch = ctypes.windll.gdi32.CreateRectRgn(0, 0, 0, 0)
+                        ctypes.windll.gdi32.CombineRgn(hrgn_notch, hrgn_rect, hrgn_main, 2)
+                        ctypes.windll.gdi32.DeleteObject(hrgn_main)
+                        ctypes.windll.gdi32.DeleteObject(hrgn_rect)
+                        hrgn_main = hrgn_notch
 
-                hrgn_bubble = ctypes.windll.gdi32.CreateRoundRectRgn(int(main_w + gap), 0, int(w) + 1, int(h) + 1, int(h), int(h))
-                hrgn_comb = ctypes.windll.gdi32.CreateRectRgn(0, 0, 0, 0)
-                ctypes.windll.gdi32.CombineRgn(hrgn_comb, hrgn_main, hrgn_bubble, 2)
-                ctypes.windll.gdi32.DeleteObject(hrgn_main)
-                ctypes.windll.gdi32.DeleteObject(hrgn_bubble)
-                user32.SetWindowRgn(self.hwnd, hrgn_comb, False)
-            elif is_notch:
-                hrgn_round = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, int(w) + 1, int(h) + 1, int(radius * 2), int(radius * 2))
-                hrgn_rect = ctypes.windll.gdi32.CreateRectRgn(0, 0, int(w) + 1, int(radius) + 1)
-                hrgn_notch = ctypes.windll.gdi32.CreateRectRgn(0, 0, 0, 0)
-                ctypes.windll.gdi32.CombineRgn(hrgn_notch, hrgn_rect, hrgn_round, 2)
-                ctypes.windll.gdi32.DeleteObject(hrgn_round)
-                ctypes.windll.gdi32.DeleteObject(hrgn_rect)
-                user32.SetWindowRgn(self.hwnd, hrgn_notch, False)
-            else:
-                hrgn = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, int(w) + 1, int(h) + 1, int(radius * 2), int(radius * 2))
-                user32.SetWindowRgn(self.hwnd, hrgn, False)
-        except Exception:
-            pass
+                    hrgn_bubble = ctypes.windll.gdi32.CreateRoundRectRgn(int(main_w + gap), 0, int(w) + 1, int(h) + 1, int(h), int(h))
+                    hrgn_comb = ctypes.windll.gdi32.CreateRectRgn(0, 0, 0, 0)
+                    ctypes.windll.gdi32.CombineRgn(hrgn_comb, hrgn_main, hrgn_bubble, 2)
+                    ctypes.windll.gdi32.DeleteObject(hrgn_main)
+                    ctypes.windll.gdi32.DeleteObject(hrgn_bubble)
+                    user32.SetWindowRgn(self.hwnd, hrgn_comb, False)
+                elif is_notch:
+                    hrgn_round = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, int(w) + 1, int(h) + 1, int(radius * 2), int(radius * 2))
+                    hrgn_rect = ctypes.windll.gdi32.CreateRectRgn(0, 0, int(w) + 1, int(radius) + 1)
+                    hrgn_notch = ctypes.windll.gdi32.CreateRectRgn(0, 0, 0, 0)
+                    ctypes.windll.gdi32.CombineRgn(hrgn_notch, hrgn_rect, hrgn_round, 2)
+                    ctypes.windll.gdi32.DeleteObject(hrgn_round)
+                    ctypes.windll.gdi32.DeleteObject(hrgn_rect)
+                    user32.SetWindowRgn(self.hwnd, hrgn_notch, False)
+                else:
+                    hrgn = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, int(w) + 1, int(h) + 1, int(radius * 2), int(radius * 2))
+                    user32.SetWindowRgn(self.hwnd, hrgn, False)
+            except Exception:
+                pass
 
         cy = h // 2
         if self.current_view == 'min':
