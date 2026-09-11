@@ -76,6 +76,8 @@ VIEW_SPECS = {
 
 SWP_NOZORDER = 0x0004
 SWP_NOACTIVATE = 0x0010
+SWP_NOCOPYBITS = 0x0100
+SWP_FLAGS = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS
 
 def format_num(n):
     if n is None:
@@ -175,7 +177,7 @@ class DynamicIslandHUD:
 
         self.root.update_idletasks()
         self.hwnd = int(self.root.frame(), 16) if hasattr(self.root, 'frame') else self.root.winfo_id()
-        user32.SetWindowPos(self.hwnd, 0, int(self.curr_x), int(self.curr_y), int(self.curr_w), int(self.curr_h), SWP_NOZORDER | SWP_NOACTIVATE)
+        user32.SetWindowPos(self.hwnd, 0, int(self.curr_x), int(self.curr_y), int(self.curr_w), int(self.curr_h), SWP_FLAGS)
 
         self.canvas = tk.Canvas(
             self.root,
@@ -330,7 +332,8 @@ class DynamicIslandHUD:
         self.target_x = max(float(m_left + 10), min(float(m_right - tw - 10), self.anchor_center_x - (tw / 2.0)))
         self.target_y = max(float(m_top + 10), min(float(m_bottom - th - 10), self.curr_y))
 
-        self.render(w=int(tw), h=int(th), radius=int(tr))
+        # Render capsule at current starting dimensions so the window shape is continuous
+        self.update_morph_layout(int(self.curr_w), int(self.curr_h), int(self.curr_r))
         self.is_animating = True
         self.is_dirty = False
         self.save_config()
@@ -385,7 +388,7 @@ class DynamicIslandHUD:
             self.target_x = self.curr_x
             self.target_y = self.curr_y
             self.anchor_center_x = self.curr_x + (self.curr_w / 2.0)
-            user32.SetWindowPos(self.hwnd, 0, int(self.curr_x), int(self.curr_y), int(self.curr_w), int(self.curr_h), SWP_NOZORDER | SWP_NOACTIVATE)
+            user32.SetWindowPos(self.hwnd, 0, int(self.curr_x), int(self.curr_y), int(self.curr_w), int(self.curr_h), SWP_FLAGS)
 
     def on_release(self, event):
         if self._was_dragged:
@@ -691,10 +694,11 @@ class DynamicIslandHUD:
                 self.curr_y = self.target_y
                 self.vel_w = self.vel_h = self.vel_r = self.vel_x = self.vel_y = 0.0
                 self.is_animating = False
+                self.render()
 
             self.canvas.config(width=int(self.curr_w), height=int(self.curr_h))
             self.update_morph_layout(int(self.curr_w), int(self.curr_h), int(self.curr_r))
-            user32.SetWindowPos(self.hwnd, 0, int(self.curr_x), int(self.curr_y), int(self.curr_w), int(self.curr_h), SWP_NOZORDER | SWP_NOACTIVATE)
+            user32.SetWindowPos(self.hwnd, 0, int(self.curr_x), int(self.curr_y), int(self.curr_w), int(self.curr_h), SWP_FLAGS)
 
         self.pulse_frame_idx = (self.pulse_frame_idx + 1) % 32
         self.rim_glow_phase = (self.rim_glow_phase + 0.12) % (2 * math.pi)
@@ -744,6 +748,13 @@ class DynamicIslandHUD:
             self.canvas.create_image(0, 0, anchor='nw', image=self.bg_photo, tags='bg')
         else:
             self.canvas.itemconfig('bg', image=self.bg_photo)
+
+        # Hardware-level window shape clipping: eliminates any chance of Windows painting square corners outside the capsule
+        try:
+            hrgn = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, int(w) + 1, int(h) + 1, int(radius * 2), int(radius * 2))
+            user32.SetWindowRgn(self.hwnd, hrgn, False)
+        except Exception:
+            pass
 
         cy = h // 2
         if self.current_view == 'min':
