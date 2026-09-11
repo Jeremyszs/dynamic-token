@@ -3,7 +3,6 @@ import "."
 
 Item {
     id: root
-    anchors.fill: parent
 
     function dp(px) { return controller.scaler.dp(px); }
     function sp(px) { return controller.scaler.sp(px); }
@@ -28,15 +27,16 @@ Item {
         font.pointSize: 9
         font.bold: true
         elide: Text.ElideRight
-        width: metricsText.x - root.dp(36) - root.dp(12)
+        width: controller.isSplitActive ? (parent.width - root.dp(44)) : Math.max(0, metricsText.x - root.dp(36) - root.dp(12))
     }
 
     // Right-hand Metrics / Hover Peek / Flying delta: rightMargin = dp(24)
     Text {
         id: metricsText
         anchors.right: parent.right
-        anchors.rightMargin: root.dp(24)
+        anchors.rightMargin: root.dp(16)
         anchors.verticalCenter: parent.verticalCenter
+        clip: true
         color: {
             if (controller.flyingDeltaText !== "") return "#30D158";
             if (controller.isHovered || controller.latestTps > 0) return "#f59e0b";
@@ -45,6 +45,7 @@ Item {
         font.family: "SF Pro Display"
         font.pointSize: 9
         font.bold: true
+        visible: !controller.isSplitActive
         text: {
             if (controller.flyingDeltaText !== "") {
                 return controller.flyingDeltaText;

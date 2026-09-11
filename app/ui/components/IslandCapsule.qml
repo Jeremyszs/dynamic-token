@@ -7,6 +7,7 @@ Item {
     property bool isHovered: false
     property bool isActivityActive: false
     property bool isActivityError: false
+    clip: true
 
     readonly property color baseBorderColor: root.isHovered ? "#444448" : "#262629"
     readonly property color glowColor: root.isActivityError ? "#FF453A" : "#30D158"

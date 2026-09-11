@@ -48,24 +48,23 @@ Window {
         // Main Island Capsule with Smooth Corners & Specular Glow
         IslandCapsule {
             id: mainCapsule
-            anchors.fill: parent
-            anchors.rightMargin: (controller.currentView === "min" && controller.isSplitActive) ? 56 : 0
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.right: (controller.currentView === "min" && controller.isSplitActive) ? splitBubble.left : parent.right
+            anchors.rightMargin: (controller.currentView === "min" && controller.isSplitActive) ? 10 : 0
             cornerRadius: controller.targetRadius
             isDockedNotch: controller.isDockedNotch
             isHovered: controller.isHovered
             isActivityActive: controller.isActivityActive
             isActivityError: controller.isActivityError
-
-            Behavior on anchors.rightMargin {
-                NumberAnimation { duration: 180; easing.type: Easing.OutBack }
-            }
         }
 
         // Split Island Activity Bubble (ejected to the right when active generation occurs)
         Rectangle {
             id: splitBubble
             visible: controller.currentView === "min" && controller.isSplitActive
-            width: 46
+            width: Math.max(56, splitText.implicitWidth + 24)
             height: parent.height
             radius: height / 2
             anchors.right: parent.right
@@ -76,11 +75,16 @@ Window {
             border.width: 1
 
             Text {
+                id: splitText
                 anchors.centerIn: parent
-                text: controller.latestTps > 0 ? (Math.round(controller.latestTps) + " tok/s") : "tok/s"
+                text: {
+                    var tps = controller.latestTps;
+                    if (!tps || tps <= 0) return "";
+                    return Math.round(tps) + " t/s";
+                }
                 color: "#FF9F0A"
                 font.family: "SF Pro Display"
-                font.pixelSize: 10
+                font.pointSize: 9
                 font.bold: true
             }
 
@@ -92,11 +96,15 @@ Window {
         // Min View Content
         MinView {
             id: minView
+            objectName: "minView"
             visible: controller ? (controller.currentView === "min") : true
             enabled: visible
             opacity: visible ? 1.0 : 0.0
-            anchors.fill: parent
-            anchors.rightMargin: (controller && controller.isSplitActive) ? 56 : 0
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: mainCapsule.width
+            clip: true
         }
 
         // Normal View Content
@@ -106,6 +114,7 @@ Window {
             enabled: visible
             opacity: visible ? 1.0 : 0.0
             anchors.fill: parent
+            clip: true
         }
 
         // Detailed View Content
@@ -115,6 +124,7 @@ Window {
             enabled: visible
             opacity: visible ? 1.0 : 0.0
             anchors.fill: parent
+            clip: true
         }
 
         // Background Window Drag Area (Behind interactive child controls)

@@ -148,8 +148,7 @@ class HUDController(QObject):
             time_since_call = time.time() - self.data_service.last_activity_time
             want_split = (self._current_view == 'min' and time_since_call < 3.5 and self.data_service.latest_tps is not None)
             if want_split != self._is_split_active:
-                self._is_split_active = want_split
-                self.splitActiveChanged.emit()
+                self.isSplitActive = want_split
 
             self.statsChanged.emit()
 
@@ -169,6 +168,14 @@ class HUDController(QObject):
     @Property(bool, notify=splitActiveChanged)
     def isSplitActive(self):
         return self._is_split_active
+
+    @isSplitActive.setter
+    def isSplitActive(self, val):
+        if self._is_split_active != val:
+            self._is_split_active = val
+            self.splitActiveChanged.emit()
+            if self._current_view == 'min':
+                self.viewChanged.emit()
 
     @Property(bool, notify=dockedNotchChanged)
     def isDockedNotch(self):
