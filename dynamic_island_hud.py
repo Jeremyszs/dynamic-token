@@ -44,7 +44,7 @@ CONFIG_PATH = os.path.expandvars(r'%LOCALAPPDATA%\hermes\dynamic_island_config.j
 
 COLOR_TRANSPARENT = '#010101'
 
-# Refined Apple Palette: Restrained, Subtle, Monochrome with minimal high-contrast functional accents
+# Refined Apple Palette
 HEX_BG = '#000000'
 HEX_BORDER = '#262629'
 HEX_BORDER_HOVER = '#444448'
@@ -55,7 +55,8 @@ HEX_GREEN = '#30D158'
 HEX_GREEN_MUTED = '#1C3A24'
 HEX_ACCENT = '#FFFFFF'
 HEX_ORANGE = '#FF9F0A'
-HEX_TAG_BG = '#1A1A1D'
+HEX_PURPLE = '#BF5AF2'
+HEX_BADGE_BG = '#151517'
 
 PIL_ISLAND_BG = (0, 0, 0, 255)
 PIL_BORDER = (38, 38, 41, 255)
@@ -66,10 +67,11 @@ PIL_TAB_ACTIVE = (42, 42, 45, 255)
 PIL_TAB_INACTIVE = (18, 18, 20, 255)
 PIL_RIM_GLOW_RGB = (48, 209, 88)
 
+# Fixed / Static Window Dimensions
 VIEW_SPECS = {
     'min': (320, 42, 21),
     'normal': (520, 136, 26),
-    'detailed': (630, 565, 28)
+    'detailed': (630, 520, 28) # Static, compact window size with smooth internal scrolling
 }
 
 SWP_NOZORDER = 0x0004
@@ -126,7 +128,10 @@ class DynamicIslandHUD:
         self.current_view = 'min'
         self.timeline = 'today'
         self.selected_provider_idx = 0
-        self.selected_account_indices = {} # Map provider_raw_name -> account_idx
+        self.selected_account_indices = {}
+        self.scroll_y = 0 # Vertical scroll offset for Detailed View
+        self.target_scroll_y = 0
+        self.max_scroll_y = 0
         self.is_hovered = False
         self.last_activity_time = 0
         self.last_delta_tokens = 0
@@ -195,6 +200,7 @@ class DynamicIslandHUD:
         self.canvas.bind('<B1-Motion>', self.on_drag)
         self.canvas.bind('<ButtonRelease-1>', self.on_release)
         self.canvas.bind('<Button-3>', self.on_right_click)
+        self.canvas.bind('<MouseWheel>', self.on_mouse_wheel)
 
         self.stats = {
             'requests': 0,
@@ -208,6 +214,7 @@ class DynamicIslandHUD:
             'latest_model': '--',
             'latest_latency': None,
             'providers_data': [],
+            'combos_data': [],
             'latest_conn_id': None
         }
         self.last_max_id = 0
@@ -305,6 +312,11 @@ class DynamicIslandHUD:
         self.current_view = view_name
         tw, th, tr = VIEW_SPECS[view_name]
 
+        # Reset scroll when exiting detailed
+        if view_name != 'detailed':
+            self.scroll_y = 0
+            self.target_scroll_y = 0
+
         m_left, m_top, m_right, m_bottom = self.get_current_monitor_workarea()
         self.anchor_center_x = self.curr_x + (self.curr_w / 2.0)
 
@@ -400,6 +412,14 @@ class DynamicIslandHUD:
         else:
             self.set_view('min')
 
+    def on_mouse_wheel(self, event):
+        if self.current_view != 'detailed' or self.max_scroll_y <= 0:
+            return
+        # event.delta is typically +/-120 on Windows
+        delta = -1 * (event.delta / 120.0) * 40.0
+        self.target_scroll_y = max(0, min(self.max_scroll_y, self.target_scroll_y + delta))
+        self.is_dirty = True
+
     def prev_provider(self):
         providers = self.stats.get('providers_data', [])
         if providers:
@@ -430,7 +450,7 @@ class DynamicIslandHUD:
             con.commit()
             con.close()
             self.fetch_database_data()
-        except Exception as e:
+        except Exception:
             pass
 
     def toggle_provider_active(self, prov_name, current_any_active):
@@ -445,7 +465,7 @@ class DynamicIslandHUD:
             con.commit()
             con.close()
             self.fetch_database_data()
-        except Exception as e:
+        except Exception:
             pass
 
     def fetch_database_data(self):
@@ -537,7 +557,7 @@ class DynamicIslandHUD:
             except Exception:
                 pass
 
-            # Multi-Provider Accounts & Quota Pool Aggregation
+            # Multi-Provider Accounts
             raw_conns = cur.execute('SELECT id, provider, name, email, priority, isActive, data FROM providerConnections ORDER BY provider, priority ASC').fetchall()
             providers_map = {}
 
@@ -587,6 +607,24 @@ class DynamicIslandHUD:
 
             providers_data.sort(key=lambda x: (not x['has_current'], -x['total_count'], x['clean_name']))
 
+            # Fetch Combos Settings from 9router
+            combos_data = []
+            try:
+                for cr in cur.execute('SELECT id, name, kind, models FROM combos ORDER BY name ASC').fetchall():
+                    m_list = []
+                    try:
+                        m_list = json.loads(cr[3])
+                    except: pass
+                    combos_data.append({
+                        'id': cr[0],
+                        'name': cr[1],
+                        'kind': cr[2],
+                        'models': m_list,
+                        'is_active': latest_m in str(m_list)
+                    })
+            except Exception:
+                pass
+
             self.stats = {
                 'requests': reqs,
                 'prompt': prompt,
@@ -599,6 +637,7 @@ class DynamicIslandHUD:
                 'latest_model': latest_m,
                 'latest_latency': latest_latency,
                 'providers_data': providers_data,
+                'combos_data': combos_data,
                 'latest_conn_id': latest_conn_id
             }
             con.close()
@@ -654,6 +693,14 @@ class DynamicIslandHUD:
             self.canvas.config(width=int(self.curr_w), height=int(self.curr_h))
             self.update_morph_layout(int(self.curr_w), int(self.curr_h), int(self.curr_r))
             user32.SetWindowPos(self.hwnd, 0, int(self.curr_x), int(self.curr_y), int(self.curr_w), int(self.curr_h), SWP_NOZORDER | SWP_NOACTIVATE)
+
+        # Smooth scrolling spring physics
+        d_scroll = self.target_scroll_y - self.scroll_y
+        if abs(d_scroll) > 0.5:
+            self.scroll_y += d_scroll * 0.35
+            self.is_dirty = True
+        else:
+            self.scroll_y = self.target_scroll_y
 
         self.pulse_frame_idx = (self.pulse_frame_idx + 1) % 32
         self.rim_glow_phase = (self.rim_glow_phase + 0.12) % (2 * math.pi)
@@ -869,45 +916,15 @@ class DynamicIslandHUD:
             tags='norm_expand'
         )
 
-    # --- VIEW: DETAILED ---
+    # --- VIEW: DETAILED (Scrollable) ---
     def render_detailed(self, w, h):
-        self.place_dot(24, 26)
+        sy = int(self.scroll_y)
 
-        # Header Title
-        self.canvas.create_text(
-            44, 26, anchor='w',
-            text='Token Usage & API Call History',
-            fill=HEX_TEXT_PRIMARY,
-            font=(FONT_NAME, 11, 'bold')
-        )
+        # Content y offset starts below the header area (y=84)
+        box_x1 = 22
+        box_w = w - 44
 
-        # Header Controls: Minimize and Shutdown
-        self.draw_circle_button(w - 62, 26, r=12, text='—', callback=lambda: self.set_view('min'))
-        self.draw_circle_button(w - 32, 26, r=12, text='X', callback=self.shutdown, bg='#241416', fg='#FF453A', border='#4A1E22')
-
-        # Row 2 (y=60): Timeline Selector (Left) + Latency readout (Right)
-        self.render_timeline_tabs(24, 60, anchor='w')
-
-        lat_txt = "-- ms"
-        lat_color = HEX_TEXT_SECONDARY
-        if self.stats.get('latest_latency'):
-            tot_ms = self.stats['latest_latency'].get('total', 0)
-            ttft_ms = self.stats['latest_latency'].get('ttft', 0)
-            if tot_ms > 8000:
-                lat_color = HEX_ORANGE
-            elif tot_ms > 0:
-                lat_color = HEX_GREEN
-            if tot_ms > 0:
-                lat_txt = f"{tot_ms / 1000.0:.2f}s (TTFT {ttft_ms}ms)"
-
-        self.canvas.create_text(
-            w - 24, 60, anchor='e',
-            text=lat_txt,
-            fill=lat_color,
-            font=(FONT_NAME, 8, 'bold')
-        )
-
-        # 1. PRIMARY METRICS CARD (y=84, h=70)
+        # 1. PRIMARY METRICS CARD (y=84 - sy)
         tot_tok = self.stats['prompt'] + self.stats['completion']
         prompt_tok = self.stats['prompt']
         cached_tok = self.stats['cached']
@@ -916,41 +933,29 @@ class DynamicIslandHUD:
         reasoning_tok = self.stats['reasoning']
         cache_pct = (cached_tok / prompt_tok * 100) if prompt_tok > 0 else 0.0
 
-        box_x1 = 22
-        box_w = w - 44
-        box_y1 = 84
+        box_y1 = 84 - sy
         box_h = 70
 
-        card_img = Image.new('RGBA', (box_w, box_h), (1, 1, 1, 0))
-        cdraw = ImageDraw.Draw(card_img)
-        cdraw.rounded_rectangle([0, 0, box_w - 1, box_h - 1], radius=16, fill=PIL_CARD_BG, outline=PIL_CARD_BORDER, width=1)
-        self.card_photos['stat_card'] = ImageTk.PhotoImage(card_img)
-        self.canvas.create_image(box_x1, box_y1, anchor='nw', image=self.card_photos['stat_card'])
+        self.draw_rounded_card('stat_card', box_x1, box_y1, box_w, box_h, radius=16)
 
         col_w = box_w // 5
-
-        # Col 1: Total Tokens
         self.canvas.create_text(box_x1 + 14, box_y1 + 20, anchor='w', text='TOTAL TOKENS', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
         self.canvas.create_text(box_x1 + 14, box_y1 + 46, anchor='w', text=format_num(tot_tok), fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 13, 'bold'))
 
-        # Col 2: Cost
         self.canvas.create_text(box_x1 + col_w + 14, box_y1 + 20, anchor='w', text='BURN COST', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
         self.canvas.create_text(box_x1 + col_w + 14, box_y1 + 46, anchor='w', text=f"${cost:.2f}", fill=HEX_GREEN, font=(FONT_NAME, 13, 'bold'))
 
-        # Col 3: Requests
         self.canvas.create_text(box_x1 + col_w * 2 + 14, box_y1 + 20, anchor='w', text='REQUESTS', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
         self.canvas.create_text(box_x1 + col_w * 2 + 14, box_y1 + 46, anchor='w', text=format_num(reqs), fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 13, 'bold'))
 
-        # Col 4: Cache Ratio
         self.canvas.create_text(box_x1 + col_w * 3 + 14, box_y1 + 20, anchor='w', text='CACHE RATIO', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
         self.canvas.create_text(box_x1 + col_w * 3 + 14, box_y1 + 46, anchor='w', text=f"{cache_pct:.1f}%", fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 13, 'bold'))
 
-        # Col 5: Thinking Tokens
         self.canvas.create_text(box_x1 + col_w * 4 + 14, box_y1 + 20, anchor='w', text='THINKING', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
         self.canvas.create_text(box_x1 + col_w * 4 + 14, box_y1 + 46, anchor='w', text=format_num(reasoning_tok), fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 13, 'bold'))
 
-        # 2. DEDICATED SECTION: ACCOUNT MANAGER & QUOTA POOL (y=182, h=106 - Expanded padding)
-        pool_header_y = 182
+        # 2. DEDICATED SECTION: ACCOUNT MANAGER & QUOTA POOL
+        pool_header_y = box_y1 + box_h + 24
         self.canvas.create_text(24, pool_header_y, anchor='w', text='ACCOUNT MANAGER', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
 
         providers = self.stats.get('providers_data', [])
@@ -961,7 +966,7 @@ class DynamicIslandHUD:
         else:
             curr_prov = {'raw_name': '', 'clean_name': 'None', 'accounts': [], 'active_count': 0, 'total_count': 0, 'total_toks': 0, 'total_reqs': 0}
 
-        # Carousel Provider Navigation: [ ‹ ] [ Provider Name ] [ › ] + Provider Level Toggle [ Enable / Disable ]
+        # Carousel Provider Navigation: [ ‹ ] [ Provider Name ] [ › ]
         car_x = w - 24
         self.draw_circle_button(car_x - 12, pool_header_y, r=10, text='›', callback=self.next_provider)
         prov_label = f"{curr_prov['clean_name']} ({p_idx + 1}/{num_providers})"
@@ -969,34 +974,26 @@ class DynamicIslandHUD:
         prov_lbl_len = len(prov_label) * 6 + 18
         self.draw_circle_button(car_x - 32 - prov_lbl_len, pool_header_y, r=10, text='‹', callback=self.prev_provider)
 
-        # Provider Level Action Button: [ Turn Off All ] / [ Turn On All ]
+        # Provider Level Toggle Button with Rounded Corners
         any_active_in_prov = (curr_prov.get('active_count', 0) > 0)
         p_action_txt = "Disable All" if any_active_in_prov else "Enable All"
-        p_btn_w = 70
+        p_btn_w = 72
+        p_btn_h = 20
         p_btn_x2 = car_x - 32 - prov_lbl_len - 14
         p_btn_x1 = p_btn_x2 - p_btn_w
-        self.canvas.create_rectangle(p_btn_x1, pool_header_y - 10, p_btn_x2, pool_header_y + 10, fill='#1C1C1F', outline=HEX_BORDER, width=1)
-        self.canvas.create_text((p_btn_x1 + p_btn_x2) // 2, pool_header_y, text=p_action_txt, fill=HEX_TEXT_SECONDARY if any_active_in_prov else HEX_GREEN, font=(FONT_NAME, 7, 'bold'))
+        self.draw_pill_button_styled(p_btn_x1, pool_header_y - 10, p_btn_x2, pool_header_y + 10, p_action_txt,
+                                    callback=lambda: self.toggle_provider_active(curr_prov.get('raw_name'), any_active_in_prov),
+                                    fill='#1C1C1F', fg=HEX_TEXT_SECONDARY if any_active_in_prov else HEX_GREEN, radius=8)
 
-        def make_prov_toggle(pr=curr_prov.get('raw_name'), any_act=any_active_in_prov):
-            return lambda: self.toggle_provider_active(pr, any_act)
-
-        self.hit_zones.append((p_btn_x1, pool_header_y - 10, p_btn_x2, pool_header_y + 10, make_prov_toggle(curr_prov.get('raw_name'), any_active_in_prov)))
-
-        # Generous top & bottom padding for Account Manager card
+        # Account Manager Card Container
         pool_box_y = pool_header_y + 18
-        pool_box_h = 106
+        pool_box_h = 108
 
-        pool_img = Image.new('RGBA', (box_w, pool_box_h), (1, 1, 1, 0))
-        p_draw = ImageDraw.Draw(pool_img)
-        p_draw.rounded_rectangle([0, 0, box_w - 1, pool_box_h - 1], radius=16, fill=PIL_CARD_BG, outline=PIL_CARD_BORDER, width=1)
-        self.card_photos['pool_card'] = ImageTk.PhotoImage(pool_img)
-        self.canvas.create_image(box_x1, pool_box_y, anchor='nw', image=self.card_photos['pool_card'])
+        self.draw_rounded_card('pool_card', box_x1, pool_box_y, box_w, pool_box_h, radius=16)
 
         accs = curr_prov.get('accounts', [])
         prov_raw = curr_prov.get('raw_name', '')
 
-        # Determine currently selected account slot index (defaults to currently active/in-flight account)
         current_active_idx = 0
         for i, a in enumerate(accs):
             if a.get('is_current'):
@@ -1041,26 +1038,22 @@ class DynamicIslandHUD:
                 font=(FONT_NAME, 8)
             )
 
-            # Account Level Action Button: [ Deactivate ] or [ Activate ]
+            # Account Level Action Button with Clean Border Radius (radius=9)
             acc_action_txt = "Deactivate Account" if is_on else "Activate Account"
             acc_btn_color = '#381618' if is_on else '#122E1A'
             acc_btn_border = '#662228' if is_on else '#1E5E2A'
             acc_text_color = '#FF6961' if is_on else HEX_GREEN
 
-            ab_w = 120
-            ab_h = 18
+            ab_w = 124
+            ab_h = 20
             ab_x1 = box_x1 + 16
             ab_y1 = pool_box_y + 76
             ab_x2 = ab_x1 + ab_w
             ab_y2 = ab_y1 + ab_h
 
-            self.canvas.create_rectangle(ab_x1, ab_y1, ab_x2, ab_y2, fill=acc_btn_color, outline=acc_btn_border, width=1)
-            self.canvas.create_text((ab_x1 + ab_x2) // 2, (ab_y1 + ab_y2) // 2, text=acc_action_txt, fill=acc_text_color, font=(FONT_NAME, 7, 'bold'))
-
-            def make_acc_toggle(cid=displayed_acc.get('id'), on_st=is_on):
-                return lambda: self.toggle_account_active(cid, on_st)
-
-            self.hit_zones.append((ab_x1, ab_y1, ab_x2, ab_y2, make_acc_toggle(displayed_acc.get('id'), is_on)))
+            self.draw_pill_button_styled(ab_x1, ab_y1, ab_x2, ab_y2, acc_action_txt,
+                                        callback=lambda cid=displayed_acc.get('id'), st=is_on: self.toggle_account_active(cid, st),
+                                        fill=acc_btn_color, fg=acc_text_color, border=acc_btn_border, radius=9)
         else:
             self.canvas.create_text(
                 box_x1 + 16, pool_box_y + 47, anchor='w',
@@ -1081,7 +1074,6 @@ class DynamicIslandHUD:
             is_curr = acc.get('is_current', False)
             is_selected = (i == sel_acc_idx)
 
-            # Apple-refined styling: Selected slot gets a crisp white outline
             if is_curr:
                 btn_fill = HEX_GREEN_MUTED
                 btn_fg = HEX_GREEN
@@ -1098,26 +1090,52 @@ class DynamicIslandHUD:
             if is_selected:
                 btn_border = '#FFFFFF'
 
-            # Draw interactive account slot pill
             bx1, by1 = slot_x, pool_box_y + 36
             bx2, by2 = slot_x + 22, pool_box_y + 60
-            self.canvas.create_rectangle(bx1, by1, bx2, by2, fill=btn_fill, outline=btn_border, width=1)
-            self.canvas.create_text((bx1 + bx2) // 2, (by1 + by2) // 2, text=str(p_num), fill=btn_fg, font=(FONT_NAME, 8, 'bold'))
 
-            # Bind click directly to switch inspected account
-            def make_slot_handler(idx=i, pr=prov_raw):
-                return lambda: self.select_account_slot(pr, idx)
-
-            self.hit_zones.append((bx1, by1, bx2, by2, make_slot_handler(i, prov_raw)))
+            # Draw rounded slot pill (radius=6)
+            self.draw_pill_button_styled(bx1, by1, bx2, by2, str(p_num),
+                                        callback=lambda idx=i, pr=prov_raw: self.select_account_slot(pr, idx),
+                                        fill=btn_fill, fg=btn_fg, border=btn_border, radius=6)
             slot_x += 26
 
-        # 3. TOP MODELS BREAKDOWN (Regular weight header, balanced track spacing)
-        models_header_y = pool_box_y + pool_box_h + 20
-        self.canvas.create_text(24, models_header_y, anchor='w', text='TOP MODELS BREAKDOWN', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9))
+        # 3. ROUTING COMBOS & WORKFLOW CHAINS (NEW SECTION below Account Manager)
+        combos_header_y = pool_box_y + pool_box_h + 24
+        self.canvas.create_text(24, combos_header_y, anchor='w', text='ROUTING COMBOS & AGENT CHAINS', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
+
+        combos_list = self.stats.get('combos_data', [])
+        combos_box_y = combos_header_y + 16
+        combos_box_h = 82
+
+        self.draw_rounded_card('combos_card', box_x1, combos_box_y, box_w, combos_box_h, radius=16)
+
+        # Render 2-column grid of combos
+        c_col_w = box_w // 2
+        c_idx = 0
+        for r_idx in range(2):
+            for col_idx in range(2):
+                if c_idx < len(combos_list):
+                    combo = combos_list[c_idx]
+                    cx = box_x1 + 16 + col_idx * c_col_w
+                    cy = combos_box_y + 20 + r_idx * 28
+
+                    m_clean = ', '.join([m.split('/')[-1] for m in combo['models']])
+                    if len(m_clean) > 22:
+                        m_clean = m_clean[:20] + '..'
+
+                    # Combo Name
+                    self.canvas.create_text(cx, cy, anchor='w', text=combo['name'], fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 9, 'bold'))
+                    # Combo Target Models
+                    self.canvas.create_text(cx + 84, cy, anchor='w', text=f"->  {m_clean}", fill=HEX_TEXT_SECONDARY, font=(FONT_NAME, 8))
+                    c_idx += 1
+
+        # 4. TOP MODELS BREAKDOWN (Bold section title per request!)
+        models_header_y = combos_box_y + combos_box_h + 24
+        self.canvas.create_text(24, models_header_y, anchor='w', text='TOP MODELS BREAKDOWN', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
 
         sorted_models = sorted(self.stats['models'].items(), key=lambda item: item[1]['prompt'], reverse=True)[:3]
 
-        bar_y = models_header_y + 18
+        bar_y = models_header_y + 20
         for m_name, mdata in sorted_models:
             p_val = mdata['prompt'] + mdata['completion']
             r_val = mdata['requests']
@@ -1127,16 +1145,16 @@ class DynamicIslandHUD:
             self.canvas.create_text(w - 24, bar_y, anchor='e', text=f"{format_num(p_val)} tok ({r_val} reqs)", fill=HEX_TEXT_SECONDARY, font=(FONT_NAME, 8))
 
             bar_w_max = w - 48
-            # Clean 8px gap between label baseline and track bar
+            # 8px vertical gap between model label and track bar
             self.canvas.create_rectangle(24, bar_y + 14, 24 + bar_w_max, bar_y + 18, fill='#1C1C1E', outline='')
             self.canvas.create_rectangle(24, bar_y + 14, 24 + int(bar_w_max * ratio), bar_y + 18, fill='#E5E5EA', outline='')
             bar_y += 32
 
-        # 4. LIVE API CALL HISTORY
-        feed_header_y = bar_y + 12
-        self.canvas.create_text(24, feed_header_y, anchor='w', text='LIVE API CALL HISTORY', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9))
+        # 5. LIVE API CALL HISTORY (Bold section title per request!)
+        feed_header_y = bar_y + 14
+        self.canvas.create_text(24, feed_header_y, anchor='w', text='LIVE API CALL HISTORY', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
 
-        feed_y = feed_header_y + 20
+        feed_y = feed_header_y + 22
         for row in self.stats['recent'][:3]:
             t_ago = format_time_ago(row[1])
             m_tag = row[3]
@@ -1149,6 +1167,85 @@ class DynamicIslandHUD:
             self.canvas.create_text(82, feed_y + 7, anchor='w', text=f"{m_tag}", fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 9))
             self.canvas.create_text(w - 24, feed_y + 7, anchor='e', text=f"+{format_num(toks)} tok • {t_ago}", fill=HEX_TEXT_SECONDARY, font=(FONT_NAME, 9))
             feed_y += 24
+
+        # 5. FIXED TOP HEADER MASK (Height 80 to cover the complete header area smoothly)
+        header_h = 80
+        h_img = Image.new('RGBA', (w - 2, header_h), (0, 0, 0, 255))
+        draw_h = ImageDraw.Draw(h_img)
+        draw_h.rounded_rectangle([0, 0, w - 3, header_h], radius=24, fill=(0, 0, 0, 255))
+        self.card_photos['header_mask'] = ImageTk.PhotoImage(h_img)
+        self.canvas.create_image(1, 1, anchor='nw', image=self.card_photos['header_mask'])
+
+        # Static Top Header Layer (Fixed, does not scroll)
+        self.place_dot(24, 26)
+
+        self.canvas.create_text(
+            44, 26, anchor='w',
+            text='Token Usage & API Call History',
+            fill=HEX_TEXT_PRIMARY,
+            font=(FONT_NAME, 11, 'bold')
+        )
+
+        # Header Controls: Minimize and Shutdown
+        self.draw_circle_button(w - 62, 26, r=12, text='—', callback=lambda: self.set_view('min'))
+        self.draw_circle_button(w - 32, 26, r=12, text='X', callback=self.shutdown, bg='#241416', fg='#FF453A', border='#4A1E22')
+
+        # Row 2 (y=56): Timeline Tabs & Latency Metric
+        self.render_timeline_tabs(24, 56, anchor='w')
+
+        lat_txt = "-- ms"
+        lat_color = HEX_TEXT_SECONDARY
+        if self.stats.get('latest_latency'):
+            tot_ms = self.stats['latest_latency'].get('total', 0)
+            ttft_ms = self.stats['latest_latency'].get('ttft', 0)
+            if tot_ms > 8000:
+                lat_color = HEX_ORANGE
+            elif tot_ms > 0:
+                lat_color = HEX_GREEN
+            if tot_ms > 0:
+                lat_txt = f"{tot_ms / 1000.0:.2f}s (TTFT {ttft_ms}ms)"
+
+        self.canvas.create_text(
+            w - 24, 56, anchor='e',
+            text=lat_txt,
+            fill=lat_color,
+            font=(FONT_NAME, 8, 'bold')
+        )
+
+        # Calculate max scrollable height (total content height vs static window height)
+        total_content_bottom = feed_y + 24
+        self.max_scroll_y = max(0, total_content_bottom - h + sy)
+
+        # Draw Apple-style subtle vertical scroll indicator on right edge if scrollable
+        if self.max_scroll_y > 0:
+            thumb_h = max(36, int((h / (total_content_bottom + sy)) * (h - 110)))
+            scroll_pct = self.scroll_y / self.max_scroll_y
+            thumb_y = 82 + int(scroll_pct * (h - 110 - thumb_h))
+            self.canvas.create_rectangle(w - 10, thumb_y, w - 6, thumb_y + thumb_h, fill='#8E8E93', outline='')
+
+    # --- UI Helpers & Rounded Card Rasterizers ---
+    def draw_rounded_card(self, cache_key, x, y, width, height, radius=16):
+        card_key = f"{cache_key}_{width}_{height}_{radius}"
+        if card_key not in self.card_photos:
+            card_img = Image.new('RGBA', (width, height), (1, 1, 1, 0))
+            cdraw = ImageDraw.Draw(card_img)
+            cdraw.rounded_rectangle([0, 0, width - 1, height - 1], radius=radius, fill=PIL_CARD_BG, outline=PIL_CARD_BORDER, width=1)
+            self.card_photos[card_key] = ImageTk.PhotoImage(card_img)
+        self.canvas.create_image(x, y, anchor='nw', image=self.card_photos[card_key])
+
+    def draw_pill_button_styled(self, x1, y1, x2, y2, text, callback, fill='#1C1C1F', fg=HEX_TEXT_PRIMARY, border=HEX_BORDER, radius=8):
+        bw = max(4, x2 - x1)
+        bh = max(4, y2 - y1)
+        key = f"pill_{bw}_{bh}_{fill}_{border}_{radius}"
+        if key not in self.card_photos:
+            im = Image.new('RGBA', (bw, bh), (1, 1, 1, 0))
+            d = ImageDraw.Draw(im)
+            d.rounded_rectangle([0, 0, bw - 1, bh - 1], radius=radius, fill=fill, outline=border, width=1)
+            self.card_photos[key] = ImageTk.PhotoImage(im)
+
+        self.canvas.create_image(x1, y1, anchor='nw', image=self.card_photos[key])
+        self.canvas.create_text((x1 + x2) // 2, (y1 + y2) // 2, text=text, fill=fg, font=(FONT_NAME, 7, 'bold'))
+        self.hit_zones.append((x1, y1, x2, y2, callback))
 
     def render_timeline_tabs(self, x, y, anchor='e'):
         tabs = [('today', 'Today'), ('7d', '7D'), ('30d', '30D'), ('all', 'All')]
