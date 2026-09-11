@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+.vscode/
+dynamic_island_config.json
