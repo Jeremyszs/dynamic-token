@@ -69,7 +69,7 @@ PIL_RIM_GLOW_RGB = (48, 209, 88)
 VIEW_SPECS = {
     'min': (320, 42, 21),
     'normal': (520, 136, 26),
-    'detailed': (630, 580, 28)
+    'detailed': (630, 565, 28)
 }
 
 SWP_NOZORDER = 0x0004
@@ -949,8 +949,8 @@ class DynamicIslandHUD:
         self.canvas.create_text(box_x1 + col_w * 4 + 14, box_y1 + 20, anchor='w', text='THINKING', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 8, 'bold'))
         self.canvas.create_text(box_x1 + col_w * 4 + 14, box_y1 + 46, anchor='w', text=format_num(reasoning_tok), fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 13, 'bold'))
 
-        # 2. DEDICATED SECTION: ACCOUNT MANAGER & QUOTA POOL (y=176, h=94)
-        pool_header_y = 176
+        # 2. DEDICATED SECTION: ACCOUNT MANAGER & QUOTA POOL (y=182, h=106 - Expanded padding)
+        pool_header_y = 182
         self.canvas.create_text(24, pool_header_y, anchor='w', text='ACCOUNT MANAGER', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
 
         providers = self.stats.get('providers_data', [])
@@ -983,8 +983,9 @@ class DynamicIslandHUD:
 
         self.hit_zones.append((p_btn_x1, pool_header_y - 10, p_btn_x2, pool_header_y + 10, make_prov_toggle(curr_prov.get('raw_name'), any_active_in_prov)))
 
-        pool_box_y = pool_header_y + 16
-        pool_box_h = 100
+        # Generous top & bottom padding for Account Manager card
+        pool_box_y = pool_header_y + 18
+        pool_box_h = 106
 
         pool_img = Image.new('RGBA', (box_w, pool_box_h), (1, 1, 1, 0))
         p_draw = ImageDraw.Draw(pool_img)
@@ -1110,32 +1111,32 @@ class DynamicIslandHUD:
             self.hit_zones.append((bx1, by1, bx2, by2, make_slot_handler(i, prov_raw)))
             slot_x += 26
 
-        # 3. TOP MODELS BREAKDOWN (y=306, generous vertical breathing room)
-        models_header_y = pool_box_y + pool_box_h + 24
-        self.canvas.create_text(24, models_header_y, anchor='w', text='TOP MODELS BREAKDOWN', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
+        # 3. TOP MODELS BREAKDOWN (Regular weight header, balanced track spacing)
+        models_header_y = pool_box_y + pool_box_h + 20
+        self.canvas.create_text(24, models_header_y, anchor='w', text='TOP MODELS BREAKDOWN', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9))
 
         sorted_models = sorted(self.stats['models'].items(), key=lambda item: item[1]['prompt'], reverse=True)[:3]
 
-        bar_y = models_header_y + 20
+        bar_y = models_header_y + 18
         for m_name, mdata in sorted_models:
             p_val = mdata['prompt'] + mdata['completion']
             r_val = mdata['requests']
             ratio = min(1.0, p_val / (tot_tok if tot_tok > 0 else 1))
 
-            self.canvas.create_text(24, bar_y, anchor='w', text=m_name, fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 9, 'bold'))
-            self.canvas.create_text(w - 24, bar_y, anchor='e', text=f"{format_num(p_val)} tok ({r_val} reqs)", fill=HEX_TEXT_SECONDARY, font=(FONT_NAME, 9))
+            self.canvas.create_text(24, bar_y, anchor='w', text=m_name, fill=HEX_TEXT_PRIMARY, font=(FONT_NAME, 9))
+            self.canvas.create_text(w - 24, bar_y, anchor='e', text=f"{format_num(p_val)} tok ({r_val} reqs)", fill=HEX_TEXT_SECONDARY, font=(FONT_NAME, 8))
 
             bar_w_max = w - 48
-            # Restrained monochrome track: neutral dark fill with subtle white/neutral progress
-            self.canvas.create_rectangle(24, bar_y + 9, 24 + bar_w_max, bar_y + 13, fill='#1C1C1E', outline='')
-            self.canvas.create_rectangle(24, bar_y + 9, 24 + int(bar_w_max * ratio), bar_y + 13, fill='#E5E5EA', outline='')
-            bar_y += 28
+            # Clean 8px gap between label baseline and track bar
+            self.canvas.create_rectangle(24, bar_y + 14, 24 + bar_w_max, bar_y + 18, fill='#1C1C1E', outline='')
+            self.canvas.create_rectangle(24, bar_y + 14, 24 + int(bar_w_max * ratio), bar_y + 18, fill='#E5E5EA', outline='')
+            bar_y += 32
 
-        # 4. LIVE API CALL HISTORY (y=442, generous vertical padding)
-        feed_header_y = bar_y + 14
-        self.canvas.create_text(24, feed_header_y, anchor='w', text='LIVE API CALL HISTORY', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9, 'bold'))
+        # 4. LIVE API CALL HISTORY
+        feed_header_y = bar_y + 12
+        self.canvas.create_text(24, feed_header_y, anchor='w', text='LIVE API CALL HISTORY', fill=HEX_TEXT_MUTED, font=(FONT_NAME, 9))
 
-        feed_y = feed_header_y + 22
+        feed_y = feed_header_y + 20
         for row in self.stats['recent'][:3]:
             t_ago = format_time_ago(row[1])
             m_tag = row[3]
