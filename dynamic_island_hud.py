@@ -7,6 +7,10 @@ import sqlite3
 import datetime
 import threading
 import ctypes
+import urllib.request
+import webbrowser
+import subprocess
+import winreg
 import tkinter as tk
 from PIL import Image, ImageDraw, ImageTk
 import win32gui
@@ -233,8 +237,11 @@ class DynamicIslandHUD:
             'latest_conn_id': None
         }
         self.last_max_id = 0
+        self.is_9router_running = False
 
+        self.check_startup_registration()
         self.fetch_database_data()
+        self.check_9router_health()
 
         self.root.after(100, self.apply_win32_styles)
 
@@ -673,9 +680,67 @@ class DynamicIslandHUD:
         except Exception:
             pass
 
+    def check_startup_registration(self):
+        try:
+            key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+            bat_path = os.path.expandvars(r"%USERPROFILE%\dynamic-token\launch_island_hud.bat")
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ | winreg.KEY_SET_VALUE) as key:
+                try:
+                    val, _ = winreg.QueryValueEx(key, 'DynamicTokenHUD')
+                    if val != f'"{bat_path}"':
+                        winreg.SetValueEx(key, 'DynamicTokenHUD', 0, winreg.REG_SZ, f'"{bat_path}"')
+                except FileNotFoundError:
+                    # Default on: register startup so Task Manager shows it enabled by default
+                    winreg.SetValueEx(key, 'DynamicTokenHUD', 0, winreg.REG_SZ, f'"{bat_path}"')
+        except Exception:
+            pass
+
+    def check_9router_health(self):
+        try:
+            req = urllib.request.Request('http://127.0.0.1:20128', headers={'User-Agent': 'DynamicTokenHUD/1.0'})
+            with urllib.request.urlopen(req, timeout=0.8) as resp:
+                running = resp.status in (200, 301, 302, 401, 403)
+        except Exception:
+            running = False
+        if running != self.is_9router_running:
+            self.is_9router_running = running
+            self.is_dirty = True
+        return running
+
+    def run_9router(self):
+        # 1. Check if 9router is already running
+        already_up = self.check_9router_health()
+        if not already_up:
+            # Spawn 9router background process (hidden/tray mode without stealing focus or killing anything)
+            cmd = os.path.expandvars(r"%APPDATA%\npm\9router.cmd")
+            if not os.path.exists(cmd):
+                cmd = "9router"
+            try:
+                creationflags = 0x08000000 | 0x00000200  # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
+                subprocess.Popen([cmd, "--no-browser"], creationflags=creationflags, shell=False)
+            except Exception:
+                try:
+                    subprocess.Popen(f'start /b "" "{cmd}" --no-browser', shell=True)
+                except Exception:
+                    pass
+
+        # 2. Open 9router Web UI in default browser
+        threading.Thread(target=self._open_web_ui, daemon=True).start()
+
+    def _open_web_ui(self):
+        for _ in range(12):
+            if self.check_9router_health():
+                break
+            time.sleep(0.5)
+        webbrowser.open('http://127.0.0.1:20128')
+
     def poll_loop(self):
+        count = 0
         while True:
             self.fetch_database_data()
+            count += 1
+            if count % 3 == 0:
+                self.check_9router_health()
             time.sleep(1.0)
 
     # --- 165Hz Harmonic Spring Loop (stiffness=169, damping=26) ---
@@ -990,7 +1055,12 @@ class DynamicIslandHUD:
             font=(FONT_NAME, 11, 'bold')
         )
 
-        # Header Controls: Minimize and Shutdown
+        # Header Controls: 9router runner, Minimize and Shutdown
+        r_txt = "9R"
+        r_fill = '#381C08' if self.is_9router_running else '#281506'
+        r_border = '#8A420A' if self.is_9router_running else '#542605'
+        r_fg = '#FF9F0A'
+        self.draw_circle_button(w - 92, 24, r=12, text=r_txt, callback=self.run_9router, bg=r_fill, fg=r_fg, border=r_border)
         self.draw_circle_button(w - 62, 24, r=12, text='minimize', callback=lambda: self.set_view('min'))
         self.draw_circle_button(w - 32, 24, r=12, text='close', callback=self.shutdown, bg='#241416', fg='#FF453A', border='#4A1E22')
 
