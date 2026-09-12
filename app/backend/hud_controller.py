@@ -73,14 +73,20 @@ class HUDController(QObject):
         if screen_obj:
             self.scaling.update_dpr(screen_obj)
 
-    @Slot(int)
-    def startNativeDrag(self, hwnd_val):
+    def set_window(self, window):
+        self._window = window
+
+    @Slot()
+    def startNativeDrag(self):
         """
         Native Windows non-client drag loop.
         Releases mouse capture and sends WM_NCLBUTTONDOWN with HTCAPTION.
         Windows DWM handles the move synchronously without any QWindowsWindow setGeometry warnings or flickering.
         """
         try:
+            if not self._window:
+                return
+            hwnd_val = int(self._window.winId())
             import ctypes, win32con
             ctypes.windll.user32.ReleaseCapture()
             ctypes.windll.user32.SendMessageW(hwnd_val, win32con.WM_NCLBUTTONDOWN, win32con.HTCAPTION, 0)

@@ -46,6 +46,8 @@ def main():
         print("Error: Failed to load QML root object.")
         sys.exit(-1)
 
+    controller.set_window(engine.rootObjects()[0])
+
     sys.exit(app.exec())
 
 if __name__ == "__main__":

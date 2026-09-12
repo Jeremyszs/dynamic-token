@@ -77,24 +77,15 @@ Window {
         }
     }
 
-    Timer {
-        id: dragEndTimer
-        interval: 80
-        repeat: false
-        onTriggered: window.endDragAndClamp()
-    }
-
     onXChanged: {
         if (Math.abs(window.x - window.dragStartWinPos.x) > 4) {
             window.wasDragged = true;
         }
-        dragEndTimer.restart();
     }
     onYChanged: {
         if (Math.abs(window.y - window.dragStartWinPos.y) > 4) {
             window.wasDragged = true;
         }
-        dragEndTimer.restart();
     }
 
     // Root Container
@@ -209,7 +200,7 @@ Window {
                 if (mouse.button === Qt.LeftButton) {
                     window.dragStartWinPos = Qt.point(window.x, window.y);
                     window.wasDragged = false;
-                    controller.startNativeDrag(window.winId);
+                    controller.startNativeDrag();
                 } else if (mouse.button === Qt.RightButton) {
                     controller.toggleDetailed();
                 }
