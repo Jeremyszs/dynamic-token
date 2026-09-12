@@ -433,6 +433,9 @@ class HUDController(QObject):
         acc['used_pct_str'] = f"{pct:.1f}%"
         acc['reset_time_left'] = format_time_left(live_reset_at) or ""
         acc['slot_index'] = sel_idx
+        # Explicit timeline synchronized burn stats (matching Tkinter)
+        acc['timeline_burn_str'] = format_num(acc.get('toks', 0))
+        acc['timeline_reqs_str'] = str(acc.get('reqs', 0))
         return acc
 
     @Property('QVariantList', notify=statsChanged)

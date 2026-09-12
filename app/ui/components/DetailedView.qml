@@ -363,11 +363,11 @@ Item {
             }
         }
 
-        // Line 4: Burn stats
+        // Line 4: Burn stats (Synchronized with timeline filter: Today / 7D / 30D / All-Time)
         Text {
             x: root.dp(16)
             y: root.dp(70) - (implicitHeight / 2)
-            text: (controller.timeline === 'today' ? "Today" : (controller.timeline === '7d' ? "7D" : (controller.timeline === '30d' ? "30D" : "All-Time"))) + " Burn: " + (controller.currentAccount.used_str || "0") + " tokens • " + (controller.currentAccount.reqs || 0) + " requests"
+            text: (controller.timeline === 'today' ? "Today" : (controller.timeline === '7d' ? "7D" : (controller.timeline === '30d' ? "30D" : "All-Time"))) + " Burn: " + (controller.currentAccount.timeline_burn_str || "0") + " tokens • " + (controller.currentAccount.timeline_reqs_str || "0") + " requests"
             color: "#A1A1A6"
             font.family: "SF Pro Display"
             font.pointSize: 8
