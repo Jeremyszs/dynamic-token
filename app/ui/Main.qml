@@ -63,33 +63,35 @@ Window {
     property bool isDragging: false
     property bool wasDragged: false
 
-    Timer {
-        id: dragEndTimer
-        interval: 120
-        repeat: false
-        onTriggered: {
-            if (window.wasDragged) {
-                window.isDragging = false;
-                window.wasDragged = false;
-                var res = controller.clampGeometry(window.x, window.y, window.width, window.height);
-                var targetX = res[0];
-                var targetY = res[1];
-                if (window.x !== targetX || window.y !== targetY) {
-                    window.x = targetX;
-                    window.y = targetY;
-                }
+    function endDragAndClamp() {
+        if (window.wasDragged) {
+            window.isDragging = false;
+            window.wasDragged = false;
+            var res = controller.clampGeometry(window.x, window.y, window.width, window.height);
+            var targetX = res[0];
+            var targetY = res[1];
+            if (window.x !== targetX || window.y !== targetY) {
+                window.x = targetX;
+                window.y = targetY;
             }
         }
     }
 
+    Timer {
+        id: dragEndTimer
+        interval: 80
+        repeat: false
+        onTriggered: window.endDragAndClamp()
+    }
+
     onXChanged: {
-        if (!window.isDragging && Math.abs(window.x - window.dragStartWinPos.x) > 4) {
+        if (Math.abs(window.x - window.dragStartWinPos.x) > 4) {
             window.wasDragged = true;
         }
         dragEndTimer.restart();
     }
     onYChanged: {
-        if (!window.isDragging && Math.abs(window.y - window.dragStartWinPos.y) > 4) {
+        if (Math.abs(window.y - window.dragStartWinPos.y) > 4) {
             window.wasDragged = true;
         }
         dragEndTimer.restart();
@@ -206,9 +208,8 @@ Window {
             onPressed: function(mouse) {
                 if (mouse.button === Qt.LeftButton) {
                     window.dragStartWinPos = Qt.point(window.x, window.y);
-                    window.isDragging = false;
                     window.wasDragged = false;
-                    window.startSystemMove();
+                    controller.startNativeDrag(window.winId);
                 } else if (mouse.button === Qt.RightButton) {
                     controller.toggleDetailed();
                 }
@@ -217,8 +218,10 @@ Window {
             onReleased: function(mouse) {
                 if (mouse.button === Qt.LeftButton) {
                     if (!window.wasDragged) {
-                        // Click on background without dragging cycles views
+                        // Immediate, responsive view cycle on click
                         controller.cycleView();
+                    } else {
+                        window.endDragAndClamp();
                     }
                 }
             }
