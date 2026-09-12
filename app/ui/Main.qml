@@ -186,7 +186,7 @@ Window {
 
             onPressed: function(mouse) {
                 if (mouse.button === Qt.LeftButton) {
-                    window.dragStartCursor = Qt.point(mouse.x, mouse.y);
+                    controller.startWindowDrag();
                     window.isDragging = false;
                     window.wasDragged = false;
                 } else if (mouse.button === Qt.RightButton) {
@@ -196,13 +196,14 @@ Window {
 
             onPositionChanged: function(mouse) {
                 if (mouse.buttons & Qt.LeftButton) {
-                    var dx = mouse.x - window.dragStartCursor.x;
-                    var dy = mouse.y - window.dragStartCursor.y;
-                    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+                    var npos = controller.updateWindowDrag();
+                    var nx = npos[0];
+                    var ny = npos[1];
+                    if (Math.abs(nx - window.x) > 2 || Math.abs(ny - window.y) > 2) {
                         window.isDragging = true;
                         window.wasDragged = true;
-                        window.x += dx;
-                        window.y += dy;
+                        window.x = nx;
+                        window.y = ny;
                     }
                 }
             }

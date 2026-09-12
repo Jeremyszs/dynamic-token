@@ -3,7 +3,7 @@ import json
 import time
 import datetime
 from PySide6.QtCore import QObject, Signal, Property, Slot, QTimer
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QGuiApplication, QCursor
 from .data_service import DataService
 from .system_integration import check_startup_registration, check_9router_health, run_9router
 from .models import format_num, format_time_ago, format_time_left, clean_model_display_name
@@ -75,6 +75,30 @@ class HUDController(QObject):
 
     def set_window(self, window):
         self._window = window
+        self._drag_cursor_offset_x = 0
+        self._drag_cursor_offset_y = 0
+
+    @Slot()
+    def startWindowDrag(self):
+        """
+        Records the cursor offset relative to window position in logical screen coordinates.
+        Absolute tracking guarantees zero feedback loops, zero delta accumulation errors, and zero flickering.
+        """
+        if not self._window:
+            return
+        cur = QCursor.pos()
+        self._drag_cursor_offset_x = cur.x() - self._window.x()
+        self._drag_cursor_offset_y = cur.y() - self._window.y()
+
+    @Slot(result=list)
+    def updateWindowDrag(self):
+        """
+        Returns the new absolute [target_x, target_y] based on current global cursor position.
+        """
+        cur = QCursor.pos()
+        nx = cur.x() - self._drag_cursor_offset_x
+        ny = cur.y() - self._drag_cursor_offset_y
+        return [nx, ny]
 
     @Property(QObject, constant=True)
     def scaler(self):
