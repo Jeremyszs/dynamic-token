@@ -5,26 +5,26 @@ cd /d "%~dp0"
 
 REM 1. Prefer local venv pythonw if present
 if exist "%~dp0venv\Scripts\pythonw.exe" (
-    start "" "%~dp0venv\Scripts\pythonw.exe" "%~dp0dynamic_island_hud.py"
+    start "" "%~dp0venv\Scripts\pythonw.exe" -m app.main
     exit /b 0
 )
 
 REM 2. Prefer hermes-agent venv pythonw if present
 if exist "%LOCALAPPDATA%\hermes\hermes-agent\venv\Scripts\pythonw.exe" (
-    start "" "%LOCALAPPDATA%\hermes\hermes-agent\venv\Scripts\pythonw.exe" "%~dp0dynamic_island_hud.py"
+    start "" "%LOCALAPPDATA%\hermes\hermes-agent\venv\Scripts\pythonw.exe" -m app.main
     exit /b 0
 )
 
 REM 3. Fallback to system pythonw or python
 where pythonw >nul 2>&1
 if %ERRORLEVEL% equ 0 (
-    start "" pythonw "%~dp0dynamic_island_hud.py"
+    start "" pythonw -m app.main
     exit /b 0
 )
 
 where python >nul 2>&1
 if %ERRORLEVEL% equ 0 (
-    start "" python "%~dp0dynamic_island_hud.py"
+    start "" python -m app.main
     exit /b 0
 )
 

@@ -54,9 +54,14 @@ To run the modern GPU-accelerated PySide6 + Qt Quick version:
 ```bash
 python -m app.main
 ```
-Or use the launcher `dynamic-token.bat`. To run the legacy Tkinter fallback version:
+Or launch via the batch launcher:
 ```bash
-python dynamic_island_hud.py
+dynamic-token.bat
+```
+
+To run the legacy Tkinter fallback version:
+```bash
+python legacy_tkinter/dynamic_island_hud.py
 ```
 
 The launcher automatically detects:
