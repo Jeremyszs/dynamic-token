@@ -59,9 +59,41 @@ Window {
     }
 
     // Dragging state
-    property point dragStartPoint: Qt.point(0, 0)
+    property point dragStartWinPos: Qt.point(0, 0)
     property bool isDragging: false
     property bool wasDragged: false
+
+    Timer {
+        id: dragEndTimer
+        interval: 120
+        repeat: false
+        onTriggered: {
+            if (window.wasDragged) {
+                window.isDragging = false;
+                window.wasDragged = false;
+                var res = controller.clampGeometry(window.x, window.y, window.width, window.height);
+                var targetX = res[0];
+                var targetY = res[1];
+                if (window.x !== targetX || window.y !== targetY) {
+                    window.x = targetX;
+                    window.y = targetY;
+                }
+            }
+        }
+    }
+
+    onXChanged: {
+        if (!window.isDragging && Math.abs(window.x - window.dragStartWinPos.x) > 4) {
+            window.wasDragged = true;
+        }
+        dragEndTimer.restart();
+    }
+    onYChanged: {
+        if (!window.isDragging && Math.abs(window.y - window.dragStartWinPos.y) > 4) {
+            window.wasDragged = true;
+        }
+        dragEndTimer.restart();
+    }
 
     // Root Container
     Item {
@@ -173,45 +205,19 @@ Window {
 
             onPressed: function(mouse) {
                 if (mouse.button === Qt.LeftButton) {
-                    window.dragStartPoint = Qt.point(mouse.x, mouse.y);
+                    window.dragStartWinPos = Qt.point(window.x, window.y);
                     window.isDragging = false;
                     window.wasDragged = false;
+                    window.startSystemMove();
                 } else if (mouse.button === Qt.RightButton) {
                     controller.toggleDetailed();
                 }
             }
 
-            onPositionChanged: function(mouse) {
-                if (mouse.buttons & Qt.LeftButton) {
-                    var dx = mouse.x - window.dragStartPoint.x;
-                    var dy = mouse.y - window.dragStartPoint.y;
-                    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
-                        window.isDragging = true;
-                        window.wasDragged = true;
-                        window.x += dx;
-                        window.y += dy;
-                    }
-                }
-            }
-
             onReleased: function(mouse) {
                 if (mouse.button === Qt.LeftButton) {
-                    if (window.wasDragged) {
-                        window.isDragging = false;
-                        window.wasDragged = false;
-
-                        // Calculate clamped screen position and smooth glide back
-                        var res = controller.clampGeometry(window.x, window.y, window.width, window.height);
-                        var targetX = res[0];
-                        var targetY = res[1];
-                        var isDocked = res[2];
-
-                        if (window.x !== targetX || window.y !== targetY) {
-                            window.x = targetX;
-                            window.y = targetY;
-                        }
-                    } else {
-                        // Click on background cycles views
+                    if (!window.wasDragged) {
+                        // Click on background without dragging cycles views
                         controller.cycleView();
                     }
                 }
