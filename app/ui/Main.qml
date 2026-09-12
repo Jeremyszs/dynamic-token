@@ -186,9 +186,7 @@ Window {
 
             onPressed: function(mouse) {
                 if (mouse.button === Qt.LeftButton) {
-                    var globalPt = windowDragArea.mapToGlobal(mouse.x, mouse.y);
-                    window.dragStartCursor = Qt.point(globalPt.x, globalPt.y);
-                    window.dragStartWinPos = Qt.point(window.x, window.y);
+                    window.dragStartCursor = Qt.point(mouse.x, mouse.y);
                     window.isDragging = false;
                     window.wasDragged = false;
                 } else if (mouse.button === Qt.RightButton) {
@@ -198,15 +196,13 @@ Window {
 
             onPositionChanged: function(mouse) {
                 if (mouse.buttons & Qt.LeftButton) {
-                    var curGlobal = windowDragArea.mapToGlobal(mouse.x, mouse.y);
-                    var dx = curGlobal.x - window.dragStartCursor.x;
-                    var dy = curGlobal.y - window.dragStartCursor.y;
-                    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+                    var dx = mouse.x - window.dragStartCursor.x;
+                    var dy = mouse.y - window.dragStartCursor.y;
+                    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
                         window.isDragging = true;
                         window.wasDragged = true;
-                        var nx = window.dragStartWinPos.x + dx;
-                        var ny = window.dragStartWinPos.y + dy;
-                        controller.updateDragMove(nx, ny);
+                        window.x += dx;
+                        window.y += dy;
                     }
                 }
             }
@@ -214,12 +210,6 @@ Window {
             onReleased: function(mouse) {
                 if (mouse.button === Qt.LeftButton) {
                     if (window.wasDragged) {
-                        // After drag ends, sync final position to window properties and clamp
-                        var curGlobal = windowDragArea.mapToGlobal(mouse.x, mouse.y);
-                        var dx = curGlobal.x - window.dragStartCursor.x;
-                        var dy = curGlobal.y - window.dragStartCursor.y;
-                        window.x = window.dragStartWinPos.x + dx;
-                        window.y = window.dragStartWinPos.y + dy;
                         window.endDragAndClamp();
                     } else {
                         // Immediate, responsive view cycle on click

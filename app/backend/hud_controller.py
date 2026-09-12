@@ -76,27 +76,6 @@ class HUDController(QObject):
     def set_window(self, window):
         self._window = window
 
-    @Slot(int, int)
-    def updateDragMove(self, global_x, global_y):
-        """
-        Smooth Win32 SetWindowPos drag without triggering QWindowsWindow setGeometry layout re-evaluations.
-        Uses SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS so the window moves cleanly at 165Hz.
-        """
-        try:
-            if not self._window:
-                return
-            hwnd_val = int(self._window.winId())
-            import ctypes
-            # SWP_NOSIZE(0x0001) | SWP_NOZORDER(0x0004) | SWP_NOACTIVATE(0x0010) | SWP_NOCOPYBITS(0x0100)
-            flags = 0x0001 | 0x0004 | 0x0010 | 0x0100
-            ctypes.windll.user32.SetWindowPos(hwnd_val, 0, int(global_x), int(global_y), 0, 0, flags)
-        except Exception as e:
-            print(f"Drag move exception: {e}")
-
-    @Slot()
-    def startNativeDrag(self):
-        pass
-
     @Property(QObject, constant=True)
     def scaler(self):
         return self.scaling
