@@ -59,6 +59,7 @@ Window {
     }
 
     // Dragging state
+    property point dragStartCursor: Qt.point(0, 0)
     property point dragStartWinPos: Qt.point(0, 0)
     property bool isDragging: false
     property bool wasDragged: false
@@ -70,21 +71,8 @@ Window {
             var res = controller.clampGeometry(window.x, window.y, window.width, window.height);
             var targetX = res[0];
             var targetY = res[1];
-            if (window.x !== targetX || window.y !== targetY) {
-                window.x = targetX;
-                window.y = targetY;
-            }
-        }
-    }
-
-    onXChanged: {
-        if (Math.abs(window.x - window.dragStartWinPos.x) > 4) {
-            window.wasDragged = true;
-        }
-    }
-    onYChanged: {
-        if (Math.abs(window.y - window.dragStartWinPos.y) > 4) {
-            window.wasDragged = true;
+            window.x = targetX;
+            window.y = targetY;
         }
     }
 
@@ -198,21 +186,44 @@ Window {
 
             onPressed: function(mouse) {
                 if (mouse.button === Qt.LeftButton) {
+                    var globalPt = windowDragArea.mapToGlobal(mouse.x, mouse.y);
+                    window.dragStartCursor = Qt.point(globalPt.x, globalPt.y);
                     window.dragStartWinPos = Qt.point(window.x, window.y);
+                    window.isDragging = false;
                     window.wasDragged = false;
-                    controller.startNativeDrag();
                 } else if (mouse.button === Qt.RightButton) {
                     controller.toggleDetailed();
                 }
             }
 
+            onPositionChanged: function(mouse) {
+                if (mouse.buttons & Qt.LeftButton) {
+                    var curGlobal = windowDragArea.mapToGlobal(mouse.x, mouse.y);
+                    var dx = curGlobal.x - window.dragStartCursor.x;
+                    var dy = curGlobal.y - window.dragStartCursor.y;
+                    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+                        window.isDragging = true;
+                        window.wasDragged = true;
+                        var nx = window.dragStartWinPos.x + dx;
+                        var ny = window.dragStartWinPos.y + dy;
+                        controller.updateDragMove(nx, ny);
+                    }
+                }
+            }
+
             onReleased: function(mouse) {
                 if (mouse.button === Qt.LeftButton) {
-                    if (!window.wasDragged) {
+                    if (window.wasDragged) {
+                        // After drag ends, sync final position to window properties and clamp
+                        var curGlobal = windowDragArea.mapToGlobal(mouse.x, mouse.y);
+                        var dx = curGlobal.x - window.dragStartCursor.x;
+                        var dy = curGlobal.y - window.dragStartCursor.y;
+                        window.x = window.dragStartWinPos.x + dx;
+                        window.y = window.dragStartWinPos.y + dy;
+                        window.endDragAndClamp();
+                    } else {
                         // Immediate, responsive view cycle on click
                         controller.cycleView();
-                    } else {
-                        window.endDragAndClamp();
                     }
                 }
             }
