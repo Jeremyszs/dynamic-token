@@ -22,15 +22,6 @@ class DataService:
         self.live_quotas_cache = {}
         self._fetching_conn_ids = set()
 
-        self.default_account_quotas = {
-            'antigravity': 200_000_000,
-            'codex': 150_000_000,
-            'gemini': 200_000_000,
-            'kilocode': 100_000_000,
-            'default': 100_000_000
-        }
-        self.custom_quotas = {}
-
     def fetch_live_quota(self, conn_id, is_9router_running):
         if not is_9router_running or not conn_id:
             return None
@@ -58,41 +49,6 @@ class DataService:
             pass
         finally:
             self._fetching_conn_ids.discard(conn_id)
-
-    def get_account_quota_limit(self, prov_name, acc_id_or_email):
-        if acc_id_or_email in self.custom_quotas:
-            return self.custom_quotas[acc_id_or_email]
-        if prov_name in self.custom_quotas:
-            return self.custom_quotas[prov_name]
-        return self.default_account_quotas.get(prov_name, self.default_account_quotas['default'])
-
-    def toggle_account_active(self, conn_id, current_status):
-        if not os.path.exists(DB_PATH) or not conn_id:
-            return
-        try:
-            con = sqlite3.connect(DB_PATH, timeout=5.0)
-            cur = con.cursor()
-            new_val = 0 if current_status else 1
-            now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-            cur.execute('UPDATE providerConnections SET isActive = ?, updatedAt = ? WHERE id = ?', (new_val, now_iso, conn_id))
-            con.commit()
-            con.close()
-        except Exception:
-            pass
-
-    def toggle_provider_active(self, prov_name, current_any_active):
-        if not os.path.exists(DB_PATH) or not prov_name:
-            return
-        try:
-            con = sqlite3.connect(DB_PATH, timeout=5.0)
-            cur = con.cursor()
-            new_val = 0 if current_any_active else 1
-            now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-            cur.execute('UPDATE providerConnections SET isActive = ?, updatedAt = ? WHERE provider = ?', (new_val, now_iso, prov_name))
-            con.commit()
-            con.close()
-        except Exception:
-            pass
 
     def fetch_stats(self, timeline='today', is_9router_running=False):
         if not os.path.exists(DB_PATH):

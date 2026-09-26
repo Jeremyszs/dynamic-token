@@ -16,7 +16,7 @@ CONFIG_PATH = os.path.expandvars(r'%LOCALAPPDATA%\hermes\dynamic_island_config.j
 TKINTER_PHYSICAL_SPECS = {
     'min': (320, 42, 21),
     'normal': (520, 136, 26),
-    'detailed': (660, 540, 28)
+    'detailed': (660, 390, 28)
 }
 
 class HUDController(QObject):
@@ -27,8 +27,6 @@ class HUDController(QObject):
     routerStatusChanged = Signal()
     splitActiveChanged = Signal()
     dockedNotchChanged = Signal()
-    selectedProviderChanged = Signal()
-    selectedAccountChanged = Signal()
     hoveredChanged = Signal()
     requestWindowResize = Signal(int, int, int) # w, h, radius
     requestWindowMove = Signal(int, int)       # x, y
@@ -40,8 +38,6 @@ class HUDController(QObject):
         
         self._current_view = 'min'
         self._timeline = 'today'
-        self._selected_provider_idx = 0
-        self._selected_account_indices = {}
         self._is_hovered = False
         self._is_docked_notch = False
         self._is_9router_running = False
@@ -134,8 +130,6 @@ class HUDController(QObject):
                     self._target_y = cfg.get('y', 40)
                     self._current_view = cfg.get('view', 'min')
                     self._timeline = cfg.get('timeline', 'today')
-                    self._selected_provider_idx = cfg.get('provider_idx', 0)
-                    self.data_service.custom_quotas = cfg.get('quotas', {})
                     self._is_docked_notch = cfg.get('docked_notch', False)
 
                 # Validate and clamp loaded position against active screen
@@ -160,8 +154,6 @@ class HUDController(QObject):
                     'y': int(self._target_y),
                     'view': self._current_view,
                     'timeline': self._timeline,
-                    'provider_idx': self._selected_provider_idx,
-                    'quotas': self.data_service.custom_quotas,
                     'docked_notch': self._is_docked_notch
                 }, f)
         except Exception:
@@ -169,8 +161,6 @@ class HUDController(QObject):
 
     def _on_background_data_ready(self):
         self.statsChanged.emit()
-        self.selectedAccountChanged.emit()
-        self.selectedProviderChanged.emit()
 
     def poll_tick(self):
         self.check_health()
@@ -194,8 +184,6 @@ class HUDController(QObject):
                 self.isSplitActive = want_split
 
             self.statsChanged.emit()
-            self.selectedAccountChanged.emit()
-            self.selectedProviderChanged.emit()
 
     # Properties
     @Property(str, notify=viewChanged)
@@ -363,81 +351,6 @@ class HUDController(QObject):
             reset_at = (now_utc + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
         return format_time_left(reset_at) or ""
 
-    # Provider and Account Manager properties
-    @Property('QVariantList', notify=statsChanged)
-    def providersList(self):
-        return self.stats.get('providers_data', [])
-
-    @Property(int, notify=selectedProviderChanged)
-    def selectedProviderIndex(self):
-        return self._selected_provider_idx
-
-    @Property('QVariantMap', notify=selectedProviderChanged)
-    def currentProvider(self):
-        provs = self.stats.get('providers_data', [])
-        if provs:
-            idx = self._selected_provider_idx % len(provs)
-            return provs[idx]
-        return {'raw_name': '', 'clean_name': 'None', 'accounts': [], 'active_count': 0, 'total_count': 0, 'total_toks': 0, 'total_reqs': 0}
-
-    @Property('QVariantMap', notify=selectedAccountChanged)
-    def currentAccount(self):
-        prov = self.currentProvider
-        accs = prov.get('accounts', [])
-        raw_name = prov.get('raw_name', '')
-        if not accs:
-            return {}
-
-        current_active_idx = 0
-        for i, a in enumerate(accs):
-            if a.get('is_current'):
-                current_active_idx = i
-                break
-        sel_idx = self._selected_account_indices.get(raw_name, current_active_idx)
-        if sel_idx >= len(accs):
-            sel_idx = 0
-        
-        acc = dict(accs[sel_idx])
-        # Enrich with live quota & limit
-        cid = acc.get('id')
-        live_data = self.data_service.fetch_live_quota(cid, self._is_9router_running)
-        live_pct = None
-        live_reset_at = None
-        if live_data and 'quotas' in live_data:
-            q_dict = live_data['quotas']
-            latest_m = self.stats.get('latest_model', '')
-            best_q = q_dict.get(latest_m) or q_dict.get('gemini-3.8-flash-high') or (next(iter(q_dict.values())) if q_dict else None)
-            if best_q and 'remainingPercentage' in best_q:
-                live_pct = max(0.0, min(100.0, 100.0 - float(best_q['remainingPercentage'])))
-                live_reset_at = best_q.get('resetAt')
-
-        if not live_reset_at and acc.get('reset_at'):
-            live_reset_at = acc['reset_at']
-        if not live_reset_at:
-            now_utc = datetime.datetime.now(datetime.timezone.utc)
-            live_reset_at = (now_utc + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-
-        acc_limit = self.data_service.get_account_quota_limit(raw_name, acc.get('full_email', ''))
-        if live_pct is not None:
-            pct = live_pct
-            used = int(acc_limit * (pct / 100.0))
-        else:
-            used = acc.get('quota_toks', 0)
-            pct = (used / acc_limit * 100.0) if acc_limit > 0 else 0.0
-
-        acc['used_tokens'] = used
-        acc['limit_tokens'] = acc_limit
-        acc['used_str'] = format_num(used)
-        acc['limit_str'] = format_num(acc_limit)
-        acc['used_pct'] = pct
-        acc['used_pct_str'] = f"{pct:.1f}%"
-        acc['reset_time_left'] = format_time_left(live_reset_at) or ""
-        acc['slot_index'] = sel_idx
-        # Explicit timeline synchronized burn stats (matching Tkinter)
-        acc['timeline_burn_str'] = format_num(acc.get('toks', 0))
-        acc['timeline_reqs_str'] = str(acc.get('reqs', 0))
-        return acc
-
     @Property('QVariantList', notify=statsChanged)
     def topModelsList(self):
         tot_tok = self.stats.get('prompt', 0) + self.stats.get('completion', 0)
@@ -522,42 +435,6 @@ class HUDController(QObject):
     def run9routerAction(self):
         run_9router()
         self.check_health()
-
-    @Slot()
-    def nextProvider(self):
-        provs = self.stats.get('providers_data', [])
-        if provs:
-            self._selected_provider_idx = (self._selected_provider_idx + 1) % len(provs)
-            self.selectedProviderChanged.emit()
-            self.selectedAccountChanged.emit()
-            self.save_config()
-
-    @Slot()
-    def prevProvider(self):
-        provs = self.stats.get('providers_data', [])
-        if provs:
-            self._selected_provider_idx = (self._selected_provider_idx - 1) % len(provs)
-            self.selectedProviderChanged.emit()
-            self.selectedAccountChanged.emit()
-            self.save_config()
-
-    @Slot(str, int)
-    def selectAccountSlot(self, prov_name, slot_idx):
-        self._selected_account_indices[prov_name] = slot_idx
-        self.selectedAccountChanged.emit()
-
-    @Slot(str, bool)
-    def toggleAccountActive(self, conn_id, current_status):
-        self.data_service.toggle_account_active(conn_id, current_status)
-        self.refresh_stats()
-        self.selectedAccountChanged.emit()
-
-    @Slot(str, bool)
-    def toggleProviderActive(self, prov_name, current_any_active):
-        self.data_service.toggle_provider_active(prov_name, current_any_active)
-        self.refresh_stats()
-        self.selectedProviderChanged.emit()
-        self.selectedAccountChanged.emit()
 
     @Slot(int, int, int, int, result=list)
     def clampGeometry(self, x, y, w, h):
